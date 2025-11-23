@@ -139,25 +139,26 @@ async def bootstrap_data_pipeline(
         
         import ssl
         
-        symbol = "BTCUSDT"
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        # Usamos Coinbase porque Binance bloquea IPs de servidores en EEUU (Error 451)
+        url = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
         
-        # Ignorar errores SSL (común en Mac)
+        # Ignorar errores SSL (común en Mac/Servers)
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        print(f"[DATA] Conectando a Binance (Standard Lib + No SSL) ({symbol})...")
+        print(f"[DATA] Conectando a Coinbase (Cloud Friendly)...")
         
         while True:
             try:
-                # Ejecutar bloqueo IO en thread separado para no congelar async loop
+                # Ejecutar bloqueo IO en thread separado
                 def fetch():
                     with urllib.request.urlopen(url, context=ctx, timeout=5) as response:
                         return json.loads(response.read().decode())
                 
                 data = await asyncio.to_thread(fetch)
-                price = float(data['price'])
+                # Coinbase format: {"data": {"base":"BTC", "currency":"USD", "amount":"98000.50"}}
+                price = float(data['data']['amount'])
                 
                 tick = {
                     "symbol": "BTC/USDT",
