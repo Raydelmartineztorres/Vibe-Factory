@@ -164,3 +164,37 @@ def toggle_trading():
 @app.get("/api/trading/status")
 def get_trading_status():
     return {"enabled": _trading_enabled}
+
+
+# === STATIC FILE SERVING (Frontend) ===
+# This MUST be at the END to avoid overriding API routes
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+# Determinar ruta de estáticos (compatible con Docker y local)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if not os.path.exists(static_dir):
+    # Fallback para desarrollo local
+    static_dir = os.path.join(os.path.dirname(__file__), "../frontend/out")
+
+if os.path.exists(static_dir):
+    # Mount Next.js assets
+    next_dir = os.path.join(static_dir, "_next")
+    if os.path.exists(next_dir):
+        app.mount("/_next", StaticFiles(directory=next_dir), name="next")
+    
+    # Catch-all route for SPA (MUST BE LAST)
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Root path
+        if full_path == "":
+            return FileResponse(os.path.join(static_dir, "index.html"))
+            
+        # Servir archivo si existe
+        file_path = os.path.join(static_dir, full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # Si no existe, servir index.html (SPA fallback)
+        return FileResponse(os.path.join(static_dir, "index.html"))
