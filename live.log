@@ -1,0 +1,3 @@
+→ Launch mode: demo
+/Users/raydelmartinez/Desktop/cursor/vibe_factory/backend/main.py:71: DeprecationWarning: There is no current event loop
+  loop = asyncio.get_event_loop()

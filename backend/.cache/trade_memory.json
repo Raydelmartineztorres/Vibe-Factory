@@ -1,0 +1,282 @@
+[
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.1641234015453665,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.9501205474972085,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.137421975418387,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.684777293914085,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.10025695788595476,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.2961410793154065,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.13164708836737554,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.3262607689546712,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.2810365409916558,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.7324645061259945,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.3866223678163806,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.13572146644021268,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.24925624957465334,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.9812585829843884,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.23754944864050775,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 3.0013411013595905,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.9003832835407957,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.5950203321961163,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.33328003757528496,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.14221771774551598,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.228899773946585,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.542429027889797,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.3261186323206348,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.7547233624406363,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 1.4135960038317716,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.8605707104160102,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.6884797245074733,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.0563106747467682,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.6861763362999482,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.7798492875534575,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.6112985404377541,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 4.445677669479425,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.6013921256472095,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": 0.0607899999999936,
+    "outcome": "WIN"
+  },
+  {
+    "context": {
+      "trend": "DOWN",
+      "volatility": "NORMAL"
+    },
+    "pnl": -0.039419999999998255,
+    "outcome": "LOSS"
+  }
+]

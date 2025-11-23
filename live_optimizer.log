@@ -1,0 +1,12 @@
+→ Launch mode: demo
+/Users/raydelmartinez/Desktop/cursor/vibe_factory/backend/main.py:65: DeprecationWarning: There is no current event loop
+  loop = asyncio.get_event_loop()
+[db] inicializando conexión a SUPABASE_URL
+[risk] tick recibido BTC/USDT @ 30000
+[risk] tick recibido BTC/USDT @ 30010
+[risk] tick recibido BTC/USDT @ 30020
+Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<Optimizer.start_loop() running at /Users/raydelmartinez/Desktop/cursor/vibe_factory/backend/optimizer.py:22>>
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py:750: RuntimeWarning: coroutine 'Optimizer.start_loop' was never awaited
+  self._ready.clear()
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Obtener la ruta del directorio donde está la app
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+APP_ROOT="$DIR/../../.."
+
+# Cambiar al directorio del proyecto
+cd "$APP_ROOT"
+
+# Ejecutar el script de inicio existente
+./start.sh
