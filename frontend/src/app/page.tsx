@@ -59,7 +59,7 @@ export default function Home() {
     setLoadingBacktest(true);
     setBacktestResult(null);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/backtest", {
+      const res = await fetch("/api/backtest", {
         method: "POST",
       });
       if (res.ok) {
@@ -75,7 +75,7 @@ export default function Home() {
 
   const executeTrade = async (side: "BUY" | "SELL") => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/trade", {
+      const res = await fetch("/api/trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -103,7 +103,7 @@ export default function Home() {
 
   const toggleTrading = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/trading/toggle", {
+      const res = await fetch("/api/trading/toggle", {
         method: "POST",
       });
       const data = await res.json();
@@ -116,7 +116,7 @@ export default function Home() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/health");
+        const res = await fetch("/api/health");
         if (res.ok) {
           const data = await res.json();
           setBackendStatus(data.status === "online" ? "Online 🟢" : "Offline 🔴");
@@ -130,7 +130,7 @@ export default function Home() {
 
     const fetchBacktestResults = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/backtest");
+        const res = await fetch("/api/backtest");
         if (res.ok) {
           const data = await res.json();
           setBacktestResult(data);
@@ -148,7 +148,7 @@ export default function Home() {
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/price");
+        const res = await fetch("/api/price");
         if (res.ok) {
           const data = await res.json();
           setLivePrice(data.price);
@@ -166,7 +166,7 @@ export default function Home() {
   useEffect(() => {
     const fetchTrades = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/trades");
+        const res = await fetch("/api/trades");
         if (res.ok) {
           const data = await res.json();
           setTrades(data.trades || []);
@@ -184,7 +184,7 @@ export default function Home() {
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/balance");
+        const res = await fetch("/api/balance");
         if (res.ok) {
           const data = await res.json();
           setBalance(data);
@@ -196,7 +196,7 @@ export default function Home() {
 
     const fetchTradingStatus = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/trading/status");
+        const res = await fetch("/api/trading/status");
         if (res.ok) {
           const data = await res.json();
           setTradingEnabled(data.enabled);
@@ -208,7 +208,7 @@ export default function Home() {
 
     const fetchPnl = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/pnl");
+        const res = await fetch("/api/pnl");
         if (res.ok) {
           const data = await res.json();
           setPnl(data);
@@ -220,7 +220,7 @@ export default function Home() {
 
     const fetchMemory = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/memory");
+        const res = await fetch("/api/memory");
         if (res.ok) {
           const data = await res.json();
           setMemoryStats(data);
@@ -230,7 +230,7 @@ export default function Home() {
 
     const fetchCandles = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/candles");
+        const res = await fetch("/api/candles");
         if (res.ok) {
           const data = await res.json();
           if (candlestickSeriesRef.current && data.candles.length > 0) {
