@@ -28,7 +28,7 @@ class Candle:
     volume: float = 0.0
 
 class RiskStrategy:
-    """Implementa los cálculos clave de exposición y auto-trading."""
+    """Implementa los cálculos clave de exposición y auto-trading con ML e inteligencia adaptativa."""
 
     def __init__(self, config: RiskConfig | None = None) -> None:
         self.config = config or RiskConfig()
@@ -44,6 +44,24 @@ class RiskStrategy:
         self.last_price = 0.0
         
         self.memory = TradeMemory()
+        
+        # 🧠 INTELIGENCIA ADAPTATIVA
+        from ml_predictor import MLPredictor
+        from market_timing import MarketTiming
+        from sentiment_manager import SentimentManager
+        from risk_manager import RiskManager, AdvancedRiskConfig
+        
+        # ML y Memory config (por defecto activados)
+        self.ml_enabled = True
+        self.memory_enabled = True
+        
+        # Inicializar componentes
+        self.ml_predictor = MLPredictor()
+        self.market_timing = MarketTiming()
+        self.sentiment_manager = SentimentManager()
+        self.risk_manager = RiskManager(AdvancedRiskConfig())
+        self.last_prediction = None
+        self.position_id = 0  # Contador para IDs de posición
         
     def _update_candle(self, price: float, timestamp: float):
         """Agrega ticks a la vela actual (5 segundos)."""
@@ -106,6 +124,10 @@ class RiskStrategy:
         else:
             self.unrealized_pnl = 0.0
         
+        # 🛡️ ACTUALIZAR BALANCE PARA DRAWDOWN PROTECTION
+        total_balance = self.config.capital_virtual + self.realized_pnl + self.unrealized_pnl
+        self.risk_manager.update_balance(total_balance)
+        
         # Verificar si el trading está habilitado
         try:
             from api import _trading_enabled
@@ -116,11 +138,11 @@ class RiskStrategy:
             
         # Guardar historial de precios
         self.price_history.append(price)
-        if len(self.price_history) > 20:
+        if len(self.price_history) > 100:  # Aumentado a 100 para ML
             self.price_history.pop(0)
         
-        # Necesitamos al menos 10 precios para detectar tendencias
-        if len(self.price_history) < 10:
+        # Necesitamos al menos 26 precios para MACD y otros indicadores
+        if len(self.price_history) < 26:
             return
         
         # Evitar trades muy frecuentes (mínimo 5 segundos entre trades)
@@ -128,7 +150,67 @@ class RiskStrategy:
         if current_time - self.last_trade_time < 5:
             return
         
+        # 🧠 === INTELIGENCIA ADAPTATIVA ===
         
+        # 1. MARKET TIMING: Registrar volumen y obtener sesión actual
+        current_vol = self.current_candle.volume if self.current_candle else 0
+        self.market_timing.record_volume(current_vol, current_time)
+        session = self.market_timing.get_current_session()
+        
+        print(f"[ADAPTIVE] Sesión: {session.name} | Agresividad: {session.aggressiveness:.2f}x | Volumen: {current_vol:.1f}")
+        
+        # 2. CALCULAR INDICADORES TÉCNICOS
+        rsi = self._calculate_rsi(period=14)
+        current_rsi = rsi if rsi is not None else 50.0
+        
+        atr = self._calculate_atr(period=14)
+        current_atr = atr if atr is not None else 50.0
+        
+        # 3. ML PREDICTION: Actualizar modelo y predecir
+        if self.ml_enabled and len(self.price_history) >= 50:
+            # Actualizar modelo con nuevo dato real
+            if len(self.price_history) > 10:
+                prev_price = self.price_history[-2]
+                self.ml_predictor.update(
+                    self.price_history[:-1], 
+                    current_rsi, 
+                    current_atr, 
+                    current_vol,
+                    prev_price  # El precio "futuro" que ocurrió
+                )
+            
+            # Predecir próximo precio
+            predicted_price = self.ml_predictor.predict(
+                self.price_history, 
+                current_rsi, 
+                current_atr, 
+                current_vol
+            )
+            
+            if predicted_price:
+                self.last_prediction = predicted_price
+                ml_signal = self.ml_predictor.get_signal(price, predicted_price)
+                prediction_change = ((predicted_price - price) / price) * 100
+                
+                print(f"[ML] 🔮 Predicción: ${predicted_price:.2f} ({prediction_change:+.3f}%) | Señal ML: {ml_signal}")
+            else:
+                ml_signal = "NEUTRAL"
+        else:
+            ml_signal = "NEUTRAL"
+        
+        # 4. AJUSTAR PARÁMETROS SEGÚN MARKET TIMING
+        base_params = {
+            'rsi_buy_threshold': 70,
+            'rsi_sell_threshold': 30,
+            'volume_multiplier': 0.5
+        }
+        adjusted_params = self.market_timing.adjust_parameters(base_params)
+        
+        print(f"[ADAPTIVE] RSI Thresholds: BUY<{adjusted_params['rsi_buy_threshold']}, SELL>{adjusted_params['rsi_sell_threshold']}")
+        
+        # === FIN INTELIGENCIA ADAPTATIVA ===
+        
+
         # --- MEMORY CHECK ---
         
         # Determinar contexto actual
@@ -146,40 +228,165 @@ class RiskStrategy:
         
         current_context = MarketContext(trend=trend_dir, volatility=volatility_level)
         
-        # Consultar memoria
-        if self.memory.should_avoid(current_context):
+        # Pro RSI calculation for memory check
+        early_rsi = self._calculate_rsi(period=14)
+        early_rsi_value = early_rsi if early_rsi is not None else 50.0
+        
+        # Consultar memoria mejorada con contexto expandido
+        if self.memory.should_avoid(current_context, rsi=early_rsi_value):
             return # Evitar trade por malas experiencias pasadas
+        
+        # 🛡️ TRAILING STOP UPDATE: Actualizar en cada tick si tenemos posición abierta
+        if self.position != 0:
+            current_pos_id = f"pos_{self.position_id}"
+            atr_for_trailing = self._calculate_atr(period=14) or 50.0
+            
+            # Actualizar trailing stop
+            new_sl = self.risk_manager.update_trailing_stop(current_pos_id, price, atr_for_trailing)
+            
+            # Verificar si el trailing stop fue alcanzado
+            if self.risk_manager.check_trailing_stop_hit(current_pos_id, price):
+                print(f"[RISK] 🛑 Cerrando posición por Trailing Stop")
+                
+                # Cerrar posición
+                if self.position > 0:
+                    # Cerrar LONG
+                    pnl = (price - self.entry_price) * self.position
+                    order = {
+                        "symbol": "BTC_USD",
+                        "side": "SELL",
+                        "size": self.position,
+                        "stop_loss": None,
+                        "take_profit": None
+                    }
+                else:
+                    # Cerrar SHORT
+                    pnl = (self.entry_price - price) * abs(self.position)
+                    order = {
+                        "symbol": "BTC_USD",
+                        "side": "BUY",
+                        "size": abs(self.position),
+                        "stop_loss": None,
+                        "take_profit": None
+                    }
+                
+                result = await execute_order(order, mode="demo")
+                self.realized_pnl += pnl
+                print(f"[PNL] Trailing Stop cerrado. PnL: ${pnl:.2f}")
+                
+                # Guardar experiencia
+                rsi_val = self._calculate_rsi(period=14) or 50.0
+                self.memory.add_experience(current_context, pnl, rsi=rsi_val)
+                
+                # Limpiar
+                self.risk_manager.remove_trailing_stop(current_pos_id)
+                self.risk_manager.remove_pyramid(current_pos_id)
+                self.position = 0
+                self.entry_price = 0
+                
+                return  # No generar nuevas señales este tick
             
         # --- RSI CHECK ---
         rsi = self._calculate_rsi(period=14)
-        # Si no hay suficientes datos para RSI, asumimos neutral (50)
         current_rsi = rsi if rsi is not None else 50.0
         
         # --- ATR CHECK (Dynamic Risk) ---
         atr = self._calculate_atr(period=14)
-        current_atr = atr if atr is not None else 50.0 # Fallback por si no hay velas suficientes
+        current_atr = atr if atr is not None else 50.0
         
         # --- VOLUME CHECK ---
         avg_vol = self._calculate_avg_volume(period=20)
         current_vol = self.current_candle.volume if self.current_candle else 0
-        # Si no hay historial, asumimos volumen OK. Si hay, pedimos al menos 50% del promedio.
         volume_ok = True
         if avg_vol > 0 and current_vol < (avg_vol * 0.5):
             volume_ok = False
             
+        # --- MACD CHECK ---
+        macd_result = self._calculate_macd()
+        macd_bullish = False
+        macd_bearish = False
+        if macd_result:
+            macd_line, signal_line, histogram = macd_result
+            macd_bullish = macd_line > signal_line
+            macd_bearish = macd_line < signal_line
+            
+        # --- EMA CROSSOVER CHECK ---
+        ema_9 = self._calculate_ema(9)
+        ema_21 = self._calculate_ema(21)
+        ema_bullish = False
+        ema_bearish = False
+        if ema_9 and ema_21:
+            ema_bullish = ema_9 > ema_21
+            ema_bearish = ema_9 < ema_21
+            
+        # --- CANDLESTICK PATTERNS ---
+        patterns = self._detect_candlestick_patterns()
+        bullish_pattern = patterns.get("hammer", False) or patterns.get("bullish_engulfing", False)
+        bearish_pattern = patterns.get("shooting_star", False) or patterns.get("bearish_engulfing", False)
+            
         # --- FIN CHECKS ---
 
-        # Señal alcista: precio subiendo (0.02%) Y RSI < 70 Y Volumen OK
-        if recent_avg > older_avg * 1.0002 and self.position <= 0 and current_rsi < 70 and volume_ok:
-            print(f"[AUTO-TRADE] 🟢 SEÑAL DE COMPRA detectada @ ${price:.2f} (RSI: {current_rsi:.1f}, ATR: {current_atr:.2f})")
+        # ===== SEÑAL ALCISTA (COMPRA) =====
+        # Condiciones adaptativas: EMA + MACD + RSI ajustado + Volumen + ML (opcional)
+        ml_confirms_buy = (ml_signal == "BUY") if self.ml_enabled else True
+        
+        # 🛡️ RISK MANAGER: Verificar drawdown
+        if not self.risk_manager.should_trade():
+            return  # No tradear si drawdown es excesivo
+        
+        if (self.position <= 0 and 
+            ema_bullish and 
+            macd_bullish and 
+            current_rsi < adjusted_params['rsi_buy_threshold'] and  # Umbral adaptivo
+            volume_ok and
+            ml_confirms_buy):  # Confirmación ML
             
-            # Stop Loss Dinámico: Precio - 2 * ATR
-            dynamic_sl = price - (2 * current_atr)
+            confidence = "ALTA" if bullish_pattern else "MEDIA"
+            print(f"[AUTO-TRADE] 🟢 SEÑAL DE COMPRA ({confidence}) @ ${price:.2f}")
+            print(f"  └─ RSI: {current_rsi:.1f} < {adjusted_params['rsi_buy_threshold']} | ATR: {current_atr:.2f}")
+            print(f"  └─ EMA9: {ema_9:.2f} > EMA21: {ema_21:.2f} | Volumen OK")
+            if bullish_pattern:
+                print(f"  └─ ✨ Patrón alcista: {[k for k, v in patterns.items() if v]}")
+            if ml_signal == "BUY":
+                print(f"  └─ 🧠 ML confirma: {ml_signal}")
+            
+            # 🛡️ CALCULAR POSITION SIZE DINÁMICO
+            memory_stats = self.memory.get_stats()
+            context_winrate = 0.5  # Default
+            if memory_stats.get('all_contexts'):
+                for ctx in memory_stats['all_contexts']:
+                    if current_context.trend in ctx['context'] and current_context.volatility in ctx['context']:
+                        context_winrate = ctx['win_rate'] / 100.0
+                        break
+            
+            # Detectar patrones
+            detected_patterns = [k for k, v in patterns.items() if v]
+            has_pattern = len(detected_patterns) > 0
+            
+            # Múltiples confirmaciones
+            multiple_confirm = ema_bullish and macd_bullish and volume_ok
+            
+            # Volatilidad ratio
+            recent_atrs = [self._calculate_atr(period=14) for _ in range(5)]
+            avg_atr = sum([a for a in recent_atrs if a]) / max(len([a for a in recent_atrs if a]), 1)
+            vol_ratio = current_atr / avg_atr if avg_atr > 0 else 1.0
+            
+            position_size = self.risk_manager.calculate_position_size(
+                ml_signal=ml_signal,
+                memory_winrate=context_winrate,
+                pattern_detected=has_pattern,
+                volatility_ratio=vol_ratio,
+                multiple_confirmations=multiple_confirm
+            )
+            
+            # Stop Loss Dinámico ajustado por sesión
+            sl_multiplier = 2.0 / session.aggressiveness  # Más agresivo = SL más cercano
+            dynamic_sl = price - (sl_multiplier * current_atr)
             
             order = {
                 "symbol": "BTC_USD",
                 "side": "BUY",
-                "size": 0.001,
+                "size": position_size,  # ⭐ Tamaño dinámico
                 "stop_loss": dynamic_sl,
                 "take_profit": None
             }
@@ -191,69 +398,167 @@ class RiskStrategy:
                 self.realized_pnl += pnl
                 print(f"[PNL] Short cerrado. PnL: ${pnl:.2f}")
                 
-                # GUARDAR EXPERIENCIA
-                self.memory.add_experience(current_context, pnl)
+                # GUARDAR EXPERIENCIA MEJORADA
+                pattern_name = detected_patterns[0] if detected_patterns else None
+                self.memory.add_experience(current_context, pnl, rsi=current_rsi, pattern=pattern_name, ml_signal=ml_signal)
+                
+                # 🛡️ Remover trailing stop del short
+                self.risk_manager.remove_trailing_stop(f"pos_{self.position_id}")
+                self.risk_manager.remove_pyramid(f"pos_{self.position_id}")
                 
                 self.position = 0
                 self.entry_price = 0
             
-            # Abrir Long
-            else:
-                self.position += 0.001
+            # Abrir Long o Pyramiding
+            self.position_id += 1
+            current_pos_id = f"pos_{self.position_id}"
+            
+            if self.position == 0:
+                # Nueva posición
+                self.position += position_size
                 self.entry_price = price
                 
+                # 🛡️ Inicializar trailing stop
+                self.risk_manager.init_trailing_stop(current_pos_id, price, dynamic_sl, "LONG")
+                
+                # 🛡️ Inicializar pyramid tracking
+                self.risk_manager.init_pyramid(current_pos_id, price, position_size)
+                
+            else:
+                # Potential pyramiding
+                prev_pos_id = f"pos_{self.position_id - 1}"
+                if self.risk_manager.should_pyramid(prev_pos_id, price, "LONG", ml_signal):
+                    pyramid_size = self.risk_manager.add_pyramid_entry(prev_pos_id, price)
+                    self.position += pyramid_size
+                    # Actualizar precio promedio
+                    self.entry_price = ((self.entry_price * (self.position - pyramid_size)) + 
+                                       (price * pyramid_size)) / self.position
+                    print(f"[🔺 PYRAMID] Posición aumentada: {self.position:.6f} BTC | Avg: ${self.entry_price:.2f}")
+            
             self.last_trade_time = current_time
             self.trades.append({
                 "id": result.get("id", f"auto_{current_time}"),
                 "time": current_time,
                 "side": "BUY",
                 "price": price,
-                "size": 0.001,
+                "size": position_size,
                 "result": result,
                 "source": "AUTO"
             })
             print(f"[AUTO-TRADE] Orden ejecutada: {result.get('id', 'N/A')} | SL: {dynamic_sl:.2f}")
         
-        # Señal bajista: precio cayendo (0.02%) Y RSI > 30 Y Volumen OK
-        elif recent_avg < older_avg * 0.9998 and self.position > 0 and current_rsi > 30 and volume_ok:
-            print(f"[AUTO-TRADE] 🔴 SEÑAL DE VENTA detectada @ ${price:.2f} (RSI: {current_rsi:.1f}, ATR: {current_atr:.2f})")
+        
+        # ===== SEÑAL BAJISTA (VENTA) =====
+        # Condiciones adaptativas: EMA + MACD + RSI ajustado + Volumen + ML (opcional)
+        ml_confirms_sell = (ml_signal == "SELL") if self.ml_enabled else True
+        
+        if (self.position >= 0 and 
+              ema_bearish and 
+              macd_bearish and 
+              current_rsi > adjusted_params['rsi_sell_threshold'] and  # Umbral adaptivo
+              volume_ok and
+              ml_confirms_sell):  # Confirmación ML
             
-            # Stop Loss Dinámico: Precio + 2 * ATR
-            dynamic_sl = price + (2 * current_atr)
+            confidence = "ALTA" if bearish_pattern else "MEDIA"
+            print(f"[AUTO-TRADE] 🔴 SEÑAL DE VENTA ({confidence}) @ ${price:.2f}")
+            print(f"  └─ RSI: {current_rsi:.1f} > {adjusted_params['rsi_sell_threshold']} | ATR: {current_atr:.2f}")
+            print(f"  └─ EMA9: {ema_9:.2f} < EMA21: {ema_21:.2f} | Volumen OK")
+            if bearish_pattern:
+                print(f"  └─ ⚠️ Patrón bajista: {[k for k, v in patterns.items() if v]}")
+            if ml_signal == "SELL":
+                print(f"  └─ 🧠 ML confirma: {ml_signal}")
+            
+            # 🛡️ CALCULAR POSITION SIZE DINÁMICO
+            memory_stats = self.memory.get_stats()
+            context_winrate = 0.5
+            if memory_stats.get('all_contexts'):
+                for ctx in memory_stats['all_contexts']:
+                    if current_context.trend in ctx['context'] and current_context.volatility in ctx['context']:
+                        context_winrate = ctx['win_rate'] / 100.0
+                        break
+            
+            # Detectar patrones
+            detected_patterns = [k for k, v in patterns.items() if v]
+            has_pattern = len(detected_patterns) > 0
+            
+            # Múltiples confirmaciones
+            multiple_confirm = ema_bearish and macd_bearish and volume_ok
+            
+            # Volatilidad ratio
+            recent_atrs = [self._calculate_atr(period=14) for _ in range(5)]
+            avg_atr = sum([a for a in recent_atrs if a]) / max(len([a for a in recent_atrs if a]), 1)
+            vol_ratio = current_atr / avg_atr if avg_atr > 0 else 1.0
+            
+            position_size = self.risk_manager.calculate_position_size(
+                ml_signal=ml_signal,
+                memory_winrate=context_winrate,
+                pattern_detected=has_pattern,
+                volatility_ratio=vol_ratio,
+                multiple_confirmations=multiple_confirm
+            )
+            
+            # Stop Loss Dinámico ajustado por sesión
+            sl_multiplier = 2.0 / session.aggressiveness
+            dynamic_sl = price + (sl_multiplier * current_atr)
             
             order = {
                 "symbol": "BTC_USD",
                 "side": "SELL",
-                "size": 0.001,
+                "size": position_size,  # ⭐ Tamaño dinámico
                 "stop_loss": dynamic_sl,
                 "take_profit": None
             }
             result = await execute_order(order, mode="demo")
             
-            # Si teníamos Long (posición positiva), calcular PnL al cerrar
+            # Si teníamos long (posición positiva), calcular PnL al cerrar
             if self.position > 0:
-                pnl = (price - self.entry_price) * abs(self.position)
+                pnl = (price - self.entry_price) * self.position
                 self.realized_pnl += pnl
                 print(f"[PNL] Long cerrado. PnL: ${pnl:.2f}")
                 
-                # GUARDAR EXPERIENCIA
-                self.memory.add_experience(current_context, pnl)
+                # GUARDAR EXPERIENCIA MEJORADA
+                pattern_name = detected_patterns[0] if detected_patterns else None
+                self.memory.add_experience(current_context, pnl, rsi=current_rsi, pattern=pattern_name, ml_signal=ml_signal)
+                
+                # 🛡️ Remover trailing stop del long
+                self.risk_manager.remove_trailing_stop(f"pos_{self.position_id}")
+                self.risk_manager.remove_pyramid(f"pos_{self.position_id}")
                 
                 self.position = 0
                 self.entry_price = 0
             
-            # Abrir Short
-            else:
-                self.position -= 0.001
+            # Abrir Short o Pyramiding
+            self.position_id += 1
+            current_pos_id = f"pos_{self.position_id}"
+            
+            if self.position == 0:
+                # Nueva posición
+                self.position -= position_size
                 self.entry_price = price
-
+                
+                # 🛡️ Inicializar trailing stop
+                self.risk_manager.init_trailing_stop(current_pos_id, price, dynamic_sl, "SHORT")
+                
+                # 🛡️ Inicializar pyramid tracking
+                self.risk_manager.init_pyramid(current_pos_id, price, position_size)
+            else:
+                # Potential pyramiding
+                prev_pos_id = f"pos_{self.position_id - 1}"
+                if self.risk_manager.should_pyramid(prev_pos_id, price, "SHORT", ml_signal):
+                    pyramid_size = self.risk_manager.add_pyramid_entry(prev_pos_id, price)
+                    self.position -= pyramid_size
+                    # Actualizar precio promedio
+                    self.entry_price = ((self.entry_price * (abs(self.position) - pyramid_size)) + 
+                                       (price * pyramid_size)) / abs(self.position)
+                    print(f"[🔺 PYRAMID] Posición aumentada: {abs(self.position):.6f} BTC | Avg: ${self.entry_price:.2f}")
+            
             self.last_trade_time = current_time
             self.trades.append({
                 "id": result.get("id", f"auto_{current_time}"),
                 "time": current_time,
                 "side": "SELL",
                 "price": price,
-                "size": 0.001,
+                "size": position_size,
                 "result": result,
                 "source": "AUTO"
             })
@@ -307,6 +612,112 @@ class RiskStrategy:
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
         return rsi
+
+    def _calculate_ema(self, period: int, prices: list[float] | None = None) -> float | None:
+        """Calcula EMA (Exponential Moving Average)."""
+        if prices is None:
+            prices = self.price_history
+            
+        if len(prices) < period:
+            return None
+            
+        # Usar últimos N precios
+        recent = prices[-period:]
+        
+        # SMA inicial
+        sma = sum(recent) / period
+        
+        # Multiplicador EMA
+        multiplier = 2 / (period + 1)
+        
+        # Calcular EMA
+        ema = sma
+        for price in recent[1:]:
+            ema = (price - ema) * multiplier + ema
+            
+        return ema
+
+    def _calculate_macd(self, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[float, float, float] | None:
+        """Calcula MACD line, signal line, y histogram."""
+        if len(self.price_history) < slow:
+            return None
+            
+        # EMA rápida y lenta
+        ema_fast = self._calculate_ema(fast)
+        ema_slow = self._calculate_ema(slow)
+        
+        if ema_fast is None or ema_slow is None:
+            return None
+            
+        # MACD line = EMA rápida - EMA lenta
+        macd_line = ema_fast - ema_slow
+        
+        # Signal line = EMA de 9 del MACD line
+        # (Simplificación: usar promedio móvil simple por ahora)
+        # En producción, calcularíamos EMA del historial de MACD
+        signal_line = macd_line * 0.9  # Aproximación simple
+        
+        # Histogram = MACD - Signal
+        histogram = macd_line - signal_line
+        
+        return macd_line, signal_line, histogram
+
+    def _detect_candlestick_patterns(self) -> dict[str, bool]:
+        """Detecta patrones básicos de velas japonesas."""
+        patterns = {
+            "hammer": False,
+            "shooting_star": False,
+            "bullish_engulfing": False,
+            "bearish_engulfing": False,
+            "doji": False
+        }
+        
+        if len(self.candles) < 2:
+            return patterns
+            
+        current = self.candles[-1]
+        previous = self.candles[-2] if len(self.candles) >= 2 else None
+        
+        if not previous:
+            return patterns
+            
+        # Calcular cuerpo y sombras
+        body = abs(current.close - current.open)
+        upper_shadow = current.high - max(current.open, current.close)
+        lower_shadow = min(current.open, current.close) - current.low
+        total_range = current.high - current.low
+        
+        # Patrón Hammer (alcista): cuerpo pequeño arriba, sombra inferior larga
+        if (lower_shadow > body * 2 and 
+            upper_shadow < body * 0.5 and 
+            current.close > current.open):
+            patterns["hammer"] = True
+            
+        # Patrón Shooting Star (bajista): cuerpo pequeño abajo, sombra superior larga
+        if (upper_shadow > body * 2 and 
+            lower_shadow < body * 0.5 and 
+            current.close < current.open):
+            patterns["shooting_star"] = True
+            
+        # Patrón Bullish Engulfing: vela verde grande envuelve vela roja anterior
+        if (previous.close < previous.open and  # Anterior bajista
+            current.close > current.open and     # Actual alcista
+            current.open < previous.close and    # Abre por debajo
+            current.close > previous.open):      # Cierra por encima
+            patterns["bullish_engulfing"] = True
+            
+        # Patrón Bearish Engulfing: vela roja grande envuelve vela verde anterior
+        if (previous.close > previous.open and  # Anterior alcista
+            current.close < current.open and     # Actual bajista
+            current.open > previous.close and    # Abre por encima
+            current.close < previous.open):      # Cierra por debajo
+            patterns["bearish_engulfing"] = True
+            
+        # Patrón Doji: apertura ≈ cierre (indecisión)
+        if body < total_range * 0.1 and total_range > 0:
+            patterns["doji"] = True
+            
+        return patterns
 
     def register_trade(self, side: str, price: float, size: float, result: dict) -> None:
         """Registra un trade manual o externo en la estrategia."""

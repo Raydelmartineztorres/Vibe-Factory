@@ -5,3 +5,7 @@ httpx
 python-dotenv
 typer
 rich
+scikit-learn
+numpy
+joblib
+psutil

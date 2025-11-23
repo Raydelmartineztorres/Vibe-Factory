@@ -4,7 +4,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { createChart, ColorType, IChartApi, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, CandlestickSeries, LineSeries, AreaSeries, HistogramSeries } from 'lightweight-charts';
 
 const steps = [
   {
@@ -51,9 +51,25 @@ export default function Home() {
   const [tradingEnabled, setTradingEnabled] = useState(true);
   const [memoryStats, setMemoryStats] = useState<any>(null);
   const [priceHistory, setPriceHistory] = useState<{ time: number, price: number }[]>([]);
+  const [currentRSI, setCurrentRSI] = useState<number | null>(null);
+  const [currentATR, setCurrentATR] = useState<number | null>(null);
+  const [currentMACD, setCurrentMACD] = useState<number | null>(null);
+  const [showRSI, setShowRSI] = useState(true);
+  const [showATR, setShowATR] = useState(true);
+  const [showMACD, setShowMACD] = useState(true);
+  const [mlPrediction, setMlPrediction] = useState<any>(null);
+  const [marketStatus, setMarketStatus] = useState<any>(null);
+  const [riskStats, setRiskStats] = useState<any>(null);
+  const [systemHealth, setSystemHealth] = useState<any>(null);
+  const [trainingInProgress, setTrainingInProgress] = useState(false);
+  const [sentiment, setSentiment] = useState<any>(null);
+  const [aiAdvice, setAiAdvice] = useState<any>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
+  const rsiSeriesRef = useRef<any>(null);
+  const atrSeriesRef = useRef<any>(null);
+  const macdSeriesRef = useRef<any>(null);
 
   const runBacktest = async () => {
     setLoadingBacktest(true);
@@ -103,15 +119,46 @@ export default function Home() {
 
   const toggleTrading = async () => {
     try {
+      const newStatus = !tradingEnabled;
       const res = await fetch("/api/trading/toggle", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newStatus }),
       });
-      const data = await res.json();
-      setTradingEnabled(data.enabled);
+      if (res.ok) {
+        setTradingEnabled(newStatus);
+        // Clear AI advice when resuming auto-trading
+        if (newStatus) {
+          setAiAdvice(null);
+        }
+      }
     } catch (error) {
-      console.error("Failed to toggle trading", error);
+      console.error("Error toggling trading:", error);
     }
   };
+
+  const getAIAdvice = async () => {
+    try {
+      const res = await fetch("/api/advice");
+      if (res.ok) {
+        const data = await res.json();
+        setAiAdvice(data);
+      }
+    } catch (error) {
+      console.error("Error getting AI advice:", error);
+    }
+  };
+
+  // Auto-refresh advice when panel is open
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (aiAdvice) {
+      interval = setInterval(getAIAdvice, 3000); // Refresh every 3 seconds
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [aiAdvice]);
 
   useEffect(() => {
     const checkBackend = async () => {
@@ -177,7 +224,74 @@ export default function Home() {
     };
 
     fetchTrades();
+    fetchTrades();
     const interval = setInterval(fetchTrades, 2000); // Update every 2 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchMlPrediction = async () => {
+      try {
+        const res = await fetch("/api/ml/prediction");
+        if (res.ok) {
+          const data = await res.json();
+          setMlPrediction(data);
+        }
+      } catch (error) { }
+    };
+
+    const fetchMarketStatus = async () => {
+      try {
+        const res = await fetch("/api/market/status");
+        if (res.ok) {
+          const data = await res.json();
+          setMarketStatus(data);
+        }
+      } catch (error) { }
+    };
+
+    const fetchRiskStats = async () => {
+      try {
+        const res = await fetch("/api/risk/stats");
+        if (res.ok) {
+          const data = await res.json();
+          setRiskStats(data);
+        }
+      } catch (error) { }
+    };
+
+    const fetchSystemHealth = async () => {
+      try {
+        const res = await fetch("/api/system/health");
+        if (res.ok) {
+          const data = await res.json();
+          setSystemHealth(data);
+        }
+      } catch (error) { }
+    };
+
+    const fetchSentiment = async () => {
+      try {
+        const res = await fetch("/api/sentiment");
+        if (res.ok) {
+          const data = await res.json();
+          setSentiment(data);
+        }
+      } catch (error) { }
+    };
+
+    fetchMlPrediction();
+    fetchMarketStatus();
+    fetchRiskStats();
+    fetchSystemHealth();
+    fetchSentiment();
+    const interval = setInterval(() => {
+      fetchMlPrediction();
+      fetchMarketStatus();
+      fetchRiskStats();
+      fetchSystemHealth();
+      fetchSentiment();
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -228,6 +342,8 @@ export default function Home() {
       } catch (error) { }
     };
 
+
+
     const fetchCandles = async () => {
       try {
         const res = await fetch("/api/candles");
@@ -268,16 +384,68 @@ export default function Home() {
       }
     };
 
+    const fetchIndicators = async () => {
+      try {
+        const res = await fetch("/api/indicators");
+        if (res.ok) {
+          // Process indicator data  
+          const data = await res.json();
+
+          const currentPrice = livePrice || 90000;
+
+          // RSI: Use raw values (0-100)
+          if (rsiSeriesRef.current && data.rsi && data.rsi.length > 0) {
+            if (showRSI) {
+              rsiSeriesRef.current.setData(data.rsi);
+            } else {
+              rsiSeriesRef.current.setData([]);
+            }
+            setCurrentRSI(data.rsi[data.rsi.length - 1]?.value || null);
+          }
+
+          // ATR: Use raw values
+          if (atrSeriesRef.current && data.atr && data.atr.length > 0) {
+            if (showATR) {
+              atrSeriesRef.current.setData(data.atr);
+            } else {
+              atrSeriesRef.current.setData([]);
+            }
+            const lastATR = data.atr[data.atr.length - 1]?.value || 0;
+            setCurrentATR((lastATR / currentPrice) * 100);
+          }
+
+          // MACD: Use raw histogram values with colors
+          if (macdSeriesRef.current && data.macd && data.macd.length > 0) {
+            if (showMACD) {
+              const macdData = data.macd.map((m: any) => ({
+                time: m.time,
+                value: m.histogram,
+                color: m.histogram >= 0 ? '#22c55e' : '#ef4444'
+              }));
+              macdSeriesRef.current.setData(macdData);
+            } else {
+              macdSeriesRef.current.setData([]);
+            }
+            setCurrentMACD(data.macd[data.macd.length - 1]?.histogram || null);
+          }
+        }
+      } catch (error) {
+        // Silently fail
+      }
+    };
+
     fetchBalance();
     fetchTradingStatus();
     fetchPnl();
     fetchMemory();
+    fetchIndicators();
 
     const balanceInterval = setInterval(fetchBalance, 5000);
     const statusInterval = setInterval(fetchTradingStatus, 1000);
     const candleInterval = setInterval(fetchCandles, 1000);
     const pnlInterval = setInterval(fetchPnl, 1000);
     const memoryInterval = setInterval(fetchMemory, 2000);
+    const indicatorInterval = setInterval(fetchIndicators, 2000);
 
     return () => {
       clearInterval(balanceInterval);
@@ -285,6 +453,7 @@ export default function Home() {
       clearInterval(candleInterval);
       clearInterval(pnlInterval);
       clearInterval(memoryInterval);
+      clearInterval(indicatorInterval);
     };
   }, [trades]);
 
@@ -298,14 +467,14 @@ export default function Home() {
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: '#0a0a0a' },
-        textColor: '#a0a0a0',
+        textColor: '#fbbf24', // Yellow for all text
       },
       grid: {
         vertLines: { color: '#1a1a1a', style: 1 },
         horzLines: { color: '#1a1a1a', style: 1 },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 400,
+      height: 500,
       timeScale: {
         timeVisible: true,
         secondsVisible: true,
@@ -313,6 +482,7 @@ export default function Home() {
       },
       rightPriceScale: {
         borderColor: '#2a2a2a',
+        textColor: '#fbbf24', // Yellow price numbers
       },
       crosshair: {
         vertLine: {
@@ -326,17 +496,87 @@ export default function Home() {
       },
     });
 
+    // Candlesticks FIRST (main chart - uses 'right' scale)
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderUpColor: '#26a69a',
-      borderDownColor: '#ef5350',
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+      priceScaleId: 'right',
+    });
+
+    // RSI Area - separate scale with gradient shadow
+    const rsiSeries = chart.addSeries(AreaSeries, {
+      topColor: 'rgba(168, 85, 247, 0.4)', // Purple with transparency
+      bottomColor: 'rgba(168, 85, 247, 0)', // Fully transparent at bottom
+      lineColor: '#a855f7', // Solid purple line
+      lineWidth: 3,
+      priceScaleId: 'rsi',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 6,
+    });
+
+    // Configure RSI scale (0-100)
+    chart.priceScale('rsi').applyOptions({
+      scaleMargins: {
+        top: 0.02,
+        bottom: 0.78,
+      },
+      borderVisible: false,
+    });
+
+    // ATR Area - separate scale with gradient shadow (BLUE)
+    const atrSeries = chart.addSeries(AreaSeries, {
+      topColor: 'rgba(59, 130, 246, 0.4)', // Blue with transparency
+      bottomColor: 'rgba(59, 130, 246, 0)', // Fully transparent at bottom
+      lineColor: '#3b82f6', // Solid blue line
+      lineWidth: 3,
+      priceScaleId: 'atr',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 6,
+    });
+
+    // Configure ATR scale
+    chart.priceScale('atr').applyOptions({
+      scaleMargins: {
+        top: 0.82,
+        bottom: 0.12,
+      },
+      borderVisible: false,
+    });
+
+    // MACD Histogram - separate scale
+    const macdSeries = chart.addSeries(HistogramSeries, {
+      color: '#26a69a',
+      priceScaleId: 'macd',
+      priceFormat: {
+        type: 'price',
+        precision: 2,
+        minMove: 0.01,
+      },
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+
+    // Configure MACD scale
+    chart.priceScale('macd').applyOptions({
+      scaleMargins: {
+        top: 0.92,
+        bottom: 0.02,
+      },
+      borderVisible: false,
     });
 
     chartRef.current = chart;
     candlestickSeriesRef.current = candlestickSeries;
+    rsiSeriesRef.current = rsiSeries;
+    atrSeriesRef.current = atrSeries;
+    macdSeriesRef.current = macdSeries;
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -352,12 +592,13 @@ export default function Home() {
     };
   }, []);
 
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16 lg:py-20">
+    <div className="min-h-screen bg-black text-white">
+      <main className="mx-auto flex w-full max-w-[98%] flex-col gap-10 px-4 py-8 lg:py-10">
         <header className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur">
           <div className="flex justify-between items-center">
-            <p className="text-sm uppercase tracking-[0.3em] text-foreground/70">
+            <p className="text-sm uppercase tracking-[0.3em] text-gray-400 font-medium">
               Vibe Factory
             </p>
             <div className="flex items-center gap-2 text-sm font-mono border border-white/10 px-3 py-1 rounded-full bg-black/20">
@@ -370,7 +611,7 @@ export default function Home() {
           <h1 className="text-4xl font-semibold leading-tight md:text-5xl">
             Configuración base para construir apps guiadas por IA en minutos.
           </h1>
-          <p className="max-w-3xl text-lg text-foreground/80">
+          <p className="max-w-3xl text-lg text-gray-300">
             Esta vista resume el estado de la fábrica: frontend listo, módulos
             backend definidos y documentación en marcha. Usa esta página como
             panel central para seguir los pasos y saber qué tocar a
@@ -406,15 +647,15 @@ export default function Home() {
                 <p className="text-sm font-semibold text-primary">
                   {step.title}
                 </p>
-                <p className="mt-2 text-base text-foreground/90">
+                <p className="mt-2 text-base text-gray-300">
                   {step.description}
                 </p>
               </div>
-              <ul className="space-y-2 text-sm text-foreground/80">
+              <ul className="space-y-2 text-sm text-gray-400">
                 {step.checklist.map((item) => (
                   <li
                     key={item}
-                    className="flex items-center gap-2 rounded-lg bg-foreground/5 px-3 py-2"
+                    className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2"
                   >
                     <span className="h-2 w-2 rounded-full bg-success" />
                     {item}
@@ -429,7 +670,7 @@ export default function Home() {
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-2xl font-semibold">Simulation Engine</h2>
-              <p className="text-foreground/70">
+              <p className="text-gray-400 font-medium">
                 Run a historical backtest using the current strategy configuration.
               </p>
             </div>
@@ -445,19 +686,25 @@ export default function Home() {
           {backtestResult && (
             <div className="mt-8 grid gap-4 border-t border-white/10 pt-8 sm:grid-cols-3">
               <div className="rounded-xl bg-black/20 p-4">
-                <p className="text-sm text-foreground/60">Final Capital</p>
+                <p className="text-sm text-gray-400 mb-1 font-medium">Final Capital</p>
                 <p className="text-2xl font-mono text-green-400">
                   ${backtestResult.final_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="rounded-xl bg-black/20 p-4">
-                <p className="text-sm text-foreground/60">Max Drawdown</p>
+              <div
+                className="rounded-xl bg-black/20 p-4 cursor-help"
+                title="Max Drawdown: La mayor caída porcentual desde un pico hasta un valle en el capital."
+              >
+                <p className="text-sm text-gray-400 mb-1 font-medium">Max Drawdown ℹ️</p>
                 <p className="text-2xl font-mono text-red-400">
                   {(backtestResult.max_drawdown * 100).toFixed(2)}%
                 </p>
               </div>
-              <div className="rounded-xl bg-black/20 p-4">
-                <p className="text-sm text-foreground/60">Total Trades</p>
+              <div
+                className="rounded-xl bg-black/20 p-4 cursor-help"
+                title="Total Trades: Número total de operaciones ejecutadas durante el backtest."
+              >
+                <p className="text-sm text-gray-400 mb-1 font-medium">Total Trades ℹ️</p>
                 <p className="text-2xl font-mono text-blue-400">
                   {backtestResult.trades}
                 </p>
@@ -470,13 +717,76 @@ export default function Home() {
         <section className="grid gap-6 lg:grid-cols-4">
           {/* Main Chart & Controls Area (3/4 width) */}
           <div className="lg:col-span-3 space-y-4">
-            {/* Chart Card */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-1 shadow-panel backdrop-blur overflow-hidden relative">
-              <div ref={chartContainerRef} className="w-full h-[500px] bg-black/20" />
-              {/* Live Price Overlay */}
-              <div className="absolute top-4 left-4 bg-black/40 backdrop-blur px-3 py-1 rounded border border-white/10">
-                <span className="text-xs text-foreground/50 mr-2">BTC/USDT</span>
-                <span className="font-mono font-bold text-lg">${livePrice?.toFixed(2) || '---'}</span>
+            {/* Chart Card - simple container, 3D effects inside */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-1 shadow-lg backdrop-blur overflow-hidden relative">
+              {/* Chart with internal glow effect */}
+              <div
+                ref={chartContainerRef}
+                className="w-full h-[500px] bg-black/20 rounded-xl"
+                style={{
+                  filter: 'drop-shadow(0 0 20px rgba(147, 51, 234, 0.15)) drop-shadow(0 0 15px rgba(59, 130, 246, 0.15))'
+                }}
+              />
+              {/* Force yellow text for chart labels */}
+              <style jsx>{`
+                div[ref='chartContainerRef'] * {
+                  color: #fbbf24 !important;
+                }
+              `}</style>
+              {/* Live Price Overlay - BIGGER and YELLOW */}
+              <div className="absolute top-4 left-4 flex items-center gap-2">
+                <div className="bg-black/80 backdrop-blur-md px-4 py-2.5 rounded-lg border border-yellow-500/30 shadow-lg">
+                  <span className="text-xs text-gray-400 mr-2 uppercase">BTC/USDT</span>
+                  <span className="font-mono font-bold text-2xl text-yellow-400">${livePrice?.toFixed(2) || '---'}</span>
+                </div>
+                {/* LIVE Indicator with glow effect */}
+                <div className="bg-green-500/20 backdrop-blur-md px-3 py-2.5 rounded-lg border border-green-500/50 flex items-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+                  <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]"></div>
+                  <span className="text-sm font-bold text-green-400">LIVE</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Indicator Legend with Toggles */}
+            <div className="flex items-center justify-center gap-6 py-2 px-4 bg-black/20 rounded-lg border border-white/10">
+              <div
+                className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer ${showRSI ? 'bg-white/5' : 'opacity-50 hover:opacity-100'}`}
+                onClick={() => setShowRSI(!showRSI)}
+                title="Click to toggle RSI graph visibility"
+              >
+                <div className={`w-3 h-0.5 rounded-full shadow-[0_0_8px_rgba(147,51,234,0.6)] ${showRSI ? 'bg-purple-500' : 'bg-gray-500'}`}></div>
+                <span className="text-xs text-purple-300 font-mono">RSI</span>
+                <span className="text-xs text-gray-400 font-medium">Momentum</span>
+                <span className="text-sm font-mono font-bold text-purple-400 ml-1">
+                  {currentRSI !== null ? `${currentRSI.toFixed(1)}%` : '--'}
+                </span>
+                <span className="text-xs ml-1 text-foreground/30">{showRSI ? '👁️' : '🚫'}</span>
+              </div>
+              <div
+                className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer ${showATR ? 'bg-white/5' : 'opacity-50 hover:opacity-100'}`}
+                onClick={() => setShowATR(!showATR)}
+                title="Click to toggle ATR graph visibility"
+              >
+                <div className={`w-3 h-0.5 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)] ${showATR ? 'bg-blue-500' : 'bg-gray-500'}`}></div>
+                <span className="text-xs text-blue-300 font-mono">ATR</span>
+                <span className="text-xs text-gray-400 font-medium">Volatilidad</span>
+                <span className="text-sm font-mono font-bold text-blue-400 ml-1">
+                  {currentATR !== null ? `${currentATR.toFixed(2)}%` : '--'}
+                </span>
+                <span className="text-xs ml-1 text-foreground/30">{showATR ? '👁️' : '🚫'}</span>
+              </div>
+              <div
+                className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer ${showMACD ? 'bg-white/5' : 'opacity-50 hover:opacity-100'}`}
+                onClick={() => setShowMACD(!showMACD)}
+                title="Click to toggle MACD histogram visibility"
+              >
+                <div className={`w-3 h-0.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)] ${showMACD ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                <span className="text-xs text-green-300 font-mono">MACD</span>
+                <span className="text-xs text-gray-400 font-medium">Tendencia</span>
+                <span className="text-sm font-mono font-bold text-green-400 ml-1">
+                  {currentMACD !== null ? `${currentMACD.toFixed(2)}` : '--'}
+                </span>
+                <span className="text-xs ml-1 text-foreground/30">{showMACD ? '👁️' : '🚫'}</span>
               </div>
             </div>
 
@@ -486,19 +796,19 @@ export default function Home() {
               {/* 1. PnL & Position Info */}
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col justify-center">
                 <div className="flex justify-between items-start mb-1">
-                  <p className="text-xs uppercase tracking-wider text-foreground/50">Unrealized PnL</p>
+                  <p className="text-xs uppercase tracking-wider text-gray-400 font-medium">Unrealized PnL</p>
                   {balance && <span className="text-xs font-mono text-yellow-400">Bal: {balance.BTC.toFixed(4)} BTC</span>}
                 </div>
                 {pnl ? (
                   <>
                     <div className={`text-3xl font-bold font-mono ${pnl.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {pnl.unrealized_pnl >= 0 ? '+' : ''}{pnl.unrealized_pnl.toFixed(2)} <span className="text-sm text-foreground/50">USDT</span>
+                      {pnl.unrealized_pnl >= 0 ? '+' : ''}{pnl.unrealized_pnl.toFixed(2)} <span className="text-sm text-gray-400">USDT</span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-foreground/60">ROE: <span className={pnl.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      <span className="text-gray-400">ROE: <span className={pnl.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}>
                         {pnl.entry_price > 0 ? ((pnl.unrealized_pnl / (pnl.entry_price * Math.abs(pnl.position_size))) * 100).toFixed(2) : '0.00'}%
                       </span></span>
-                      <span className="text-foreground/60">Size: {Math.abs(pnl.position_size).toFixed(3)} BTC</span>
+                      <span className="text-gray-400">Size: {Math.abs(pnl.position_size).toFixed(3)} BTC</span>
                     </div>
                   </>
                 ) : (
@@ -531,53 +841,659 @@ export default function Home() {
                 >
                   {tradingEnabled ? "🛑 PAUSE AUTO-TRADING" : "▶ RESUME AUTO-TRADING"}
                 </button>
+
+                {/* AI Advice Button - Only visible when trading is paused */}
+                {!tradingEnabled && (
+                  <button
+                    onClick={getAIAdvice}
+                    className="w-full py-2 rounded-lg font-mono text-sm border bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 transition-all"
+                  >
+                    🤖 OBTENER CONSEJO DE IA
+                  </button>
+                )}
               </div>
 
               {/* 3. Last Trade Info */}
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col justify-center">
-                <p className="text-xs uppercase tracking-wider text-foreground/50 mb-1">Last Trade</p>
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-medium mb-1">Last Trade</p>
                 {lastTrade ? (
                   <>
                     <div className="text-3xl font-bold font-mono">
                       <span className={lastTrade.side === 'BUY' ? 'text-green-400' : 'text-red-400'}>
                         {lastTrade.side}
                       </span>
-                      <span className="text-sm text-foreground/50 ml-2">@ {lastTrade.price?.toFixed(2)}</span>
+                      <span className="text-sm text-gray-500 ml-2">@ {lastTrade.price?.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-foreground/60">Size: {lastTrade.size?.toFixed(3)} BTC</span>
-                      <span className="text-foreground/60">
+                      <span className="text-gray-400">Size: {lastTrade.size?.toFixed(3)} BTC</span>
+                      <span className="text-gray-400">
                         {lastTrade.time ? new Date(lastTrade.time * 1000).toLocaleTimeString() : 'N/A'}
                       </span>
                     </div>
                   </>
                 ) : (
-                  <div className="text-2xl font-mono text-foreground/30">No trades</div>
+                  <p className="py-8 text-center text-foreground/40">No trade yet</p>
+                )}
+              </div>
+            </div>
+
+            {/* AI Advice Panel */}
+            {aiAdvice && (
+              <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 backdrop-blur">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-purple-300 flex items-center gap-2">
+                    🤖 Consejo de IA
+                    <span className={`text-xs px-2 py-0.5 rounded ${aiAdvice.confidence === 'high' ? 'bg-green-500/20 text-green-400' :
+                      aiAdvice.confidence === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                      {aiAdvice.confidence === 'high' ? 'Alta confianza' :
+                        aiAdvice.confidence === 'medium' ? 'Media confianza' : 'Baja confianza'}
+                    </span>
+                  </h3>
+                  <button
+                    onClick={() => setAiAdvice(null)}
+                    className="text-foreground/40 hover:text-foreground/80 transition-colors text-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-sm text-white mb-3 leading-relaxed whitespace-pre-line font-medium">
+                  {aiAdvice.advice}
+                </p>
+
+                {/* Trade Setup Box */}
+                {aiAdvice.action !== 'wait' && aiAdvice.trade_setup && (
+                  <div className="mb-3 p-3 bg-black/40 rounded border border-white/10 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <span className="text-[10px] text-yellow-400/70 uppercase block">Entry</span>
+                      <span className="font-mono text-yellow-400 font-bold">${aiAdvice.trade_setup.entry}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-red-400/70 uppercase block">Stop Loss</span>
+                      <span className="font-mono text-red-400 font-bold">${aiAdvice.trade_setup.sl}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-green-400/70 uppercase block">Take Profit</span>
+                      <span className="font-mono text-green-400 font-bold">${aiAdvice.trade_setup.tp}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                  <div className="flex gap-3">
+                    <span className="text-purple-300 font-mono">RSI: {aiAdvice.indicators.rsi}</span>
+                    <span className="text-blue-300 font-mono">ATR: {aiAdvice.indicators.atr}</span>
+                    <span className="text-white/60">{aiAdvice.indicators.trend} / {aiAdvice.indicators.volatility}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {aiAdvice.win_probability && (
+                      <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded font-mono font-bold border border-yellow-500/20">
+                        🎯 {aiAdvice.win_probability}% Win Prob
+                      </span>
+                    )}
+                    <span className={`px-3 py-1 rounded font-mono font-bold ${aiAdvice.action === 'buy' ? 'bg-green-500/20 text-green-400' :
+                      aiAdvice.action === 'sell' ? 'bg-red-500/20 text-red-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                      {aiAdvice.action === 'buy' ? '📈 COMPRAR' :
+                        aiAdvice.action === 'sell' ? '📉 VENDER' : '⏸️ ESPERAR'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 4. AI Brain Dashboard (Enhanced) */}
+              <div className="md:col-span-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-4 backdrop-blur">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <span className="text-2xl">🧠</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-purple-300">AI Learning System</p>
+                      <p className="text-xs text-purple-200/50">Self-Optimizing Trading Bot</p>
+                    </div>
+                    {marketStatus && (
+                      <div className={`ml-4 px-3 py-1 rounded-full border text-xs font-mono flex items-center gap-2 ${marketStatus.is_peak
+                        ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
+                        : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                        }`}>
+                        <span>{marketStatus.is_peak ? '🔥 PEAK HOURS' : '🌙 OFF HOURS'}</span>
+                        <span className="opacity-50">|</span>
+                        <span>{marketStatus.aggressiveness}x Aggro</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ML Prediction Panel */}
+                <div className="mb-4 bg-black/20 rounded-lg p-4 border border-purple-500/20">
+                  <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                    <span>🤖</span> Predicción en Tiempo Real
+                    {mlPrediction?.is_trained && <span className="text-[10px] bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full border border-green-500/30">Modelo Entrenado</span>}
+                  </h3>
+
+                  {mlPrediction ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
+                        <div className="text-gray-400 text-xs mb-1">Señal ML</div>
+                        <div className={`text-xl font-bold ${mlPrediction.signal === 'BUY' ? 'text-green-400' :
+                          mlPrediction.signal === 'SELL' ? 'text-red-400' :
+                            'text-gray-400'
+                          }`}>
+                          {mlPrediction.signal}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
+                        <div className="text-gray-400 text-xs mb-1">Precio Predicho</div>
+                        <div className="text-xl font-mono text-blue-300">
+                          ${mlPrediction.predicted_price?.toFixed(2) || '---'}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500 py-2 text-sm">
+                      Cargando modelo...
+                    </div>
+                  )}
+                </div>
+
+                {memoryStats && (
+                  <div className="px-3 py-1 bg-purple-500/20 rounded-full border border-purple-500/30">
+                    <span className="text-xs text-purple-300 font-mono">
+                      {memoryStats.total_trades || 0} Experiences
+                    </span>
+                  </div>
+                )}
+
+
+                {/* Risk Manager Panel */}
+                <div className="mb-4 bg-black/20 rounded-lg p-4 border border-red-500/20">
+                  <h3 className="text-sm font-bold text-red-300 mb-3 flex items-center gap-2">
+                    <span>🛡️</span> Risk Manager Shield
+                    {riskStats && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${riskStats.drawdown_state === 'NORMAL' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
+                        riskStats.drawdown_state === 'STOP' ? 'bg-red-900/50 text-red-300 border-red-500/30' :
+                          'bg-yellow-900/50 text-yellow-300 border-yellow-500/30'
+                        }`}>
+                        {riskStats.drawdown_state}
+                      </span>
+                    )}
+                  </h3>
+
+                  {riskStats ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Trailing Stops</div>
+                        <div className="text-lg font-mono font-bold text-blue-300">
+                          {riskStats.trailing_stops_active}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Pyramids</div>
+                        <div className="text-lg font-mono font-bold text-purple-300">
+                          {riskStats.pyramid_positions}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Drawdown</div>
+                        <div className={`text-lg font-mono font-bold ${riskStats.daily_drawdown > 5 ? 'text-red-400' : 'text-green-400'
+                          }`}>
+                          {riskStats.daily_drawdown}%
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Peak Balance</div>
+                        <div className="text-lg font-mono font-bold text-gray-300">
+                          ${riskStats.peak_balance}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500 py-2 text-sm">
+                      Cargando stats...
+                    </div>
+                  )}
+                </div>
+
+                {memoryStats && memoryStats.total_trades > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {/* Win Rate with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Win Rate: Porcentaje de trades ganadores. ≥50% = más victorias que derrotas"
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Win Rate ℹ️</p>
+                      <p className={`text-2xl font-mono font-bold ${memoryStats.win_rate >= 50 ? 'text-green-400' : 'text-yellow-400'
+                        }`}>
+                        {memoryStats.win_rate}%
+                      </p>
+                      <p className="text-xs text-foreground/40 mt-1">
+                        {memoryStats.total_wins}W / {memoryStats.total_losses}L
+                      </p>
+                    </div>
+
+                    {/* Average PnL with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Avg PnL: Ganancia o pérdida promedio por cada operación realizada."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Avg PnL/Trade ℹ️</p>
+                      <p className={`text-2xl font-mono font-bold ${memoryStats.average_pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                        ${memoryStats.average_pnl}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Per trade</p>
+                    </div>
+
+                    {/* Best Context with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Best Setup: La condición de mercado (Tendencia/Volatilidad) donde el bot gana más frecuentemente."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Best Setup ℹ️</p>
+                      <p className="text-lg font-mono font-bold text-green-400">
+                        {memoryStats.best_context?.context || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {memoryStats.best_context ? `${memoryStats.best_context.win_rate.toFixed(0)}% WR` : ''}
+                      </p>
+                    </div>
+
+                    {/* Worst Context with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Avoid: La condición de mercado donde el bot suele perder. El bot intentará evitar operar aquí."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Avoid ℹ️</p>
+                      <p className="text-lg font-mono font-bold text-red-400">
+                        {memoryStats.worst_context?.context || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {memoryStats.worst_context ? `${memoryStats.worst_context.win_rate.toFixed(0)}% WR` : ''}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-foreground/30 text-sm">
+                    Waiting for first trade experience...
+                  </div>
                 )}
               </div>
 
-              {/* 4. Brain Status (New) */}
-              <div className="md:col-span-3 rounded-xl border border-white/10 bg-purple-500/10 p-3 backdrop-blur flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500/20 rounded-lg">
-                    <span className="text-xl">🧠</span>
+              {/* Market Sentiment Dashboard */}
+              {sentiment && (
+                <div className="md:col-span-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4 backdrop-blur mb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-purple-500/20 rounded-lg">
+                        <span className="text-2xl">📰</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-purple-300">Market Sentiment</p>
+                        <p className="text-xs text-purple-200/50">Análisis en Tiempo Real</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full border text-sm font-bold ${sentiment.overall === 'bullish'
+                        ? 'bg-green-900/50 text-green-300 border-green-500/30'
+                        : sentiment.overall === 'bearish'
+                          ? 'bg-red-900/50 text-red-300 border-red-500/30'
+                          : 'bg-gray-900/50 text-gray-300 border-gray-500/30'
+                      }`}>
+                      {sentiment.overall === 'bullish' && '🐂 BULLISH'}
+                      {sentiment.overall === 'bearish' && '🐻 BEARISH'}
+                      {sentiment.overall === 'neutral' && '😐 NEUTRAL'}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-purple-300 font-bold">AI Memory</p>
-                    <p className="text-sm text-purple-200/70">Learning from every trade...</p>
+
+                  {/* Sentiment Score Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400">Sentiment Score</span>
+                      <span className="text-xs font-mono text-purple-300">{sentiment.score.toFixed(2)}</span>
+                    </div>
+                    <div className="h-2 bg-black/30 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${sentiment.score > 0 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-gradient-to-r from-red-500 to-red-400'
+                          }`}
+                        style={{
+                          width: `${Math.abs(sentiment.score) * 50}%`,
+                          marginLeft: sentiment.score < 0 ? `${50 + (sentiment.score * 50)}%` : '50%'
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+                      <span>-1.0 (Bearish)</span>
+                      <span>0.0</span>
+                      <span>+1.0 (Bullish)</span>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-black/20 rounded-lg p-2 text-center">
+                      <div className="text-[10px] text-gray-400">Confidence</div>
+                      <div className={`text-sm font-mono font-bold ${sentiment.confidence === 'high' ? 'text-green-400' :
+                          sentiment.confidence === 'medium' ? 'text-yellow-400' :
+                            'text-gray-400'
+                        }`}>
+                        {sentiment.confidence.toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-2 text-center">
+                      <div className="text-[10px] text-gray-400">Trend</div>
+                      <div className="text-sm font-mono font-bold text-purple-300">
+                        {sentiment.trend === 'improving' && '📈'}
+                        {sentiment.trend === 'worsening' && '📉'}
+                        {sentiment.trend === 'stable' && '➡️'}
+                        {' '}{sentiment.trend.toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-2 text-center">
+                      <div className="text-[10px] text-gray-400">News</div>
+                      <div className="text-sm font-mono font-bold text-blue-300">
+                        {sentiment.news_count}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Events */}
+                  {sentiment.recent_events && sentiment.recent_events.length > 0 && (
+                    <div className="mt-4">
+                      <div className="text-xs text-gray-400 mb-2 font-bold">📡 Latest News:</div>
+                      <div className="space-y-2">
+                        {sentiment.recent_events.slice(0, 3).map((news: any, i: number) => (
+                          <div key={i} className="bg-black/20 rounded p-2 text-xs hover:bg-black/30 transition-colors">
+                            <div className="flex items-start gap-2">
+                              <span className="text-lg flex-shrink-0">
+                                {news.sentiment?.sentiment === 'positive' && '🟢'}
+                                {news.sentiment?.sentiment === 'negative' && '🔴'}
+                                {news.sentiment?.sentiment === 'neutral' && '🟡'}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-gray-300 line-clamp-2">{news.title}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-gray-500">{news.source}</span>
+                                  <span className="text-[10px] text-purple-400">
+                                    Score: {news.sentiment?.score?.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* System Health Dashboard */}
+              {systemHealth && (
+                <div className="md:col-span-3 rounded-xl border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4 backdrop-blur mb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-500/20 rounded-lg">
+                        <span className="text-2xl">⚡</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-green-300">System Health</p>
+                        <p className="text-xs text-green-200/50">Status & Performance Monitoring</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full border ${systemHealth.status === 'online'
+                      ? 'bg-green-900/50 text-green-300 border-green-500/30'
+                      : 'bg-red-900/50 text-red-300 border-red-500/30'
+                      }`}>
+                      <span className="text-xs font-mono">
+                        {systemHealth.status === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">Uptime</div>
+                      <div className="text-lg font-mono font-bold text-green-300">
+                        {Math.floor(systemHealth.uptime / 60)}m
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">Experiencias</div>
+                      <div className="text-lg font-mono font-bold text-blue-300">
+                        {systemHealth.memory_experiences}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">Confianza</div>
+                      <div className={`text-lg font-mono font-bold ${systemHealth.learning_confidence === 'HIGH' ? 'text-green-400' :
+                        systemHealth.learning_confidence === 'MEDIUM' ? 'text-yellow-400' :
+                          'text-gray-400'
+                        }`}>
+                        {systemHealth.learning_confidence}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">RAM</div>
+                      <div className="text-lg font-mono font-bold text-purple-300">
+                        {systemHealth.memory_mb?.toFixed(0) || 0}MB
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Training Button */}
+                  <div className="bg-black/20 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-yellow-300">🚀 Entrenamiento Rápido</p>
+                      <p className="text-xs text-gray-400">Aprende de 100 trades históricos en segundos</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setTrainingInProgress(true);
+                        try {
+                          const res = await fetch('/api/training/run', { method: 'POST' });
+                          const data = await res.json();
+                          alert(data.success ? `✅ ${data.message}` : `❌ ${data.message}`);
+                        } catch (error) {
+                          alert('❌ Error iniciando entrenamiento');
+                        }
+                        setTrainingInProgress(false);
+                      }}
+                      disabled={trainingInProgress}
+                      className="px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 text-sm font-bold"
+                    >
+                      {trainingInProgress ? '⏳ Entrenando...' : '🎯 Entrenar Ahora'}
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-6 text-right">
-                  <div>
-                    <p className="text-xs text-purple-300/50">Memories</p>
-                    <p className="font-mono text-xl text-purple-300">{memoryStats?.total_memories || 0}</p>
+              )}
+
+              {/* 5. Performance Dashboard (New) */}
+              {memoryStats && memoryStats.total_trades > 0 && (
+                <div className="md:col-span-3 rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 p-4 backdrop-blur mt-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                      <span className="text-2xl">📊</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-blue-300">Performance Dashboard</p>
+                      <p className="text-xs text-blue-200/50">Real-time Metrics & Equity Curve</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-purple-300/50">Last Lesson</p>
-                    <p className="font-mono text-xl text-purple-300">{memoryStats?.recent_outcome || "Waiting..."}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Profit Factor: Relación entre Ganancia Bruta y Pérdida Bruta.&#10;> 1.0: Estrategia Rentable&#10;> 1.5: Estrategia Excelente&#10;< 1.0: Estrategia Perdedora"
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Profit Factor ℹ️</p>
+                      <p className={`text-xl font-mono font-bold ${memoryStats.profit_factor >= 1.5 ? 'text-green-400' : memoryStats.profit_factor >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        {memoryStats.profit_factor}
+                      </p>
+                    </div>
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Net Profit: Ganancia Neta Real (Ganancia Bruta - Pérdida Bruta). Lo que realmente has ganado."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Net Profit ℹ️</p>
+                      <p className={`text-xl font-mono font-bold ${memoryStats.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${memoryStats.net_profit}
+                      </p>
+                    </div>
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Gross Profit: Suma total de todas las operaciones ganadoras, sin restar las pérdidas."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Gross Profit ℹ️</p>
+                      <p className="text-xl font-mono font-bold text-green-400/80">
+                        ${memoryStats.gross_profit}
+                      </p>
+                    </div>
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Gross Loss: Suma total de todas las operaciones perdedoras (en valor absoluto)."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Gross Loss ℹ️</p>
+                      <p className="text-xl font-mono font-bold text-red-400/80">
+                        -${memoryStats.gross_loss}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* Cumulative PnL Chart (Simple CSS Bar/Line representation) */}
+                  <div className="bg-black/20 rounded-lg p-4 h-48 flex flex-col relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs text-yellow-400 font-mono font-bold">📈 Equity Curve (Ganancia Acumulada)</div>
+                      {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
+                        <div className="text-xs text-gray-400 font-mono">
+                          {memoryStats.cumulative_pnl.length} trades
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Chart Area */}
+                    <div className="flex-1 relative">
+                      {/* Zero Line */}
+                      <div className="absolute w-full h-px bg-white/20 top-1/2 left-0 z-0">
+                        <span className="absolute right-0 -top-3 text-[10px] text-gray-500">$0</span>
+                      </div>
+
+                      {/* Real-time Line Overlay */}
+                      <svg className="absolute top-0 left-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
+                          <>
+                            {/* Gradient fill under the line */}
+                            <defs>
+                              <linearGradient id="equityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
+                                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            {/* Filled area */}
+                            <polygon
+                              points={`0,50 ${memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                                const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
+                                const y = 50 - (point.pnl / maxVal * 45);
+                                return `${x},${y}`;
+                              }).join(' ')} 100,50`}
+                              fill="url(#equityGradient)"
+                            />
+                            {/* Main line */}
+                            <polyline
+                              points={memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                                const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
+                                const y = 50 - (point.pnl / maxVal * 45);
+                                return `${x},${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#22c55e"
+                              strokeWidth="1"
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          </>
+                        )}
+                      </svg>
+
+                      {/* Bar chart representation */}
+                      <div className="flex items-end gap-1 w-full h-full z-10">
+                        {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 ? (
+                          memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                            const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                            const height = Math.min(Math.abs(point.pnl) / maxVal * 45, 45);
+                            const isFirst = i === 0;
+                            const isLast = i === memoryStats.cumulative_pnl.length - 1;
+                            const showTimeLabel = isFirst || isLast || (i % Math.floor(memoryStats.cumulative_pnl.length / 4) === 0);
+
+                            return (
+                              <div key={i} className="flex-1 min-w-[2px] relative group">
+                                <div
+                                  className={`w-full rounded-t transition-all duration-500 ${point.pnl >= 0 ? 'bg-green-500/30' : 'bg-red-500/30'}`}
+                                  style={{
+                                    height: `${Math.max(height, 3)}%`,
+                                    marginBottom: point.pnl >= 0 ? '50%' : `${50 - height}%`
+                                  }}
+                                >
+                                  {/* Tooltip on hover */}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+                                    <div className={`font-bold ${point.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                      ${point.pnl.toFixed(2)}
+                                    </div>
+                                    <div className="text-gray-400">Trade #{point.trade}</div>
+                                  </div>
+                                </div>
+                                {/* Time label */}
+                                {showTimeLabel && (
+                                  <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-gray-500 whitespace-nowrap">
+                                    #{point.trade}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
+                            No trades yet to display chart
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pattern Performance */}
+                  {memoryStats && memoryStats.pattern_stats && memoryStats.pattern_stats.length > 0 && (
+                    <div className="mt-4 bg-black/20 rounded-lg p-4 border border-orange-500/20">
+                      <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
+                        <span>🕯️</span> Performance por Patrón
+                      </h3>
+                      <div className="space-y-2">
+                        {memoryStats.pattern_stats.map((stat: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between bg-black/30 p-2 rounded text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-gray-300">{stat.pattern}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${stat.confidence === 'HIGH' ? 'bg-green-900 text-green-300' :
+                                stat.confidence === 'MEDIUM' ? 'bg-yellow-900 text-yellow-300' :
+                                  'bg-gray-800 text-gray-400'
+                                }`}>{stat.confidence}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className={stat.win_rate >= 50 ? 'text-green-400' : 'text-red-400'}>
+                                {stat.win_rate}% WR
+                              </span>
+                              <span className={`font-mono w-16 text-right ${stat.avg_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                ${stat.avg_pnl}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -647,6 +1563,6 @@ export default function Home() {
           )}
         </section>
       </main>
-    </div>
+    </div >
   );
 }
