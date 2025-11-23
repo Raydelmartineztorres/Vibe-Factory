@@ -297,27 +297,42 @@ export default function Home() {
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#d1d5db',
+        background: { type: ColorType.Solid, color: '#0a0a0a' },
+        textColor: '#a0a0a0',
       },
       grid: {
-        vertLines: { color: '#ffffff10' },
-        horzLines: { color: '#ffffff10' },
+        vertLines: { color: '#1a1a1a', style: 1 },
+        horzLines: { color: '#1a1a1a', style: 1 },
       },
       width: chartContainerRef.current.clientWidth,
       height: 400,
       timeScale: {
         timeVisible: true,
         secondsVisible: true,
+        borderColor: '#2a2a2a',
+      },
+      rightPriceScale: {
+        borderColor: '#2a2a2a',
+      },
+      crosshair: {
+        vertLine: {
+          color: '#6a6a6a',
+          labelBackgroundColor: '#1a1a1a',
+        },
+        horzLine: {
+          color: '#6a6a6a',
+          labelBackgroundColor: '#1a1a1a',
+        },
       },
     });
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderUpColor: '#26a69a',
+      borderDownColor: '#ef5350',
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
     });
 
     chartRef.current = chart;
