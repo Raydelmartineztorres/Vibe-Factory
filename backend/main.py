@@ -95,22 +95,26 @@ def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
         static_dir = os.path.join(os.path.dirname(__file__), "../frontend/out")
 
     if os.path.exists(static_dir):
+        # Mount static assets
         app.mount("/_next", StaticFiles(directory=os.path.join(static_dir, "_next")), name="next")
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
+        
         @app.get("/{full_path:path}")
         async def serve_frontend(full_path: str):
-            # Si es una API, dejar pasar (ya manejado arriba)
-            if full_path.startswith("api"):
+            # Si es una API, dejar pasar (ya manejado por las rutas de api.py)
+            if full_path.startswith("api/"):
                 from fastapi import HTTPException
-                raise HTTPException(status_code=404, detail="Not Found")
+                raise HTTPException(status_code=404, detail="No encontrado")
+            
+            # Root path
+            if full_path == "" or full_path == "/":
+                return FileResponse(os.path.join(static_dir, "index.html"))
                 
             # Servir archivo si existe
             file_path = os.path.join(static_dir, full_path)
             if os.path.exists(file_path) and os.path.isfile(file_path):
                 return FileResponse(file_path)
                 
-            # Si no, servir index.html (SPA Routing)
+            # Si no existe, servir index.html (SPA fallback)
             return FileResponse(os.path.join(static_dir, "index.html"))
     else:
         print("[WARN] No se encontró directorio 'static' o '../frontend/out'. Frontend no servido.")
