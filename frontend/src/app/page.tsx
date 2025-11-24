@@ -874,8 +874,8 @@ export default function Home() {
                       <td className="py-3 px-4 font-mono">#{trade.id}</td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded text-xs font-bold ${trade.side === 'LONG'
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-red-500/20 text-red-400'
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-red-500/20 text-red-400'
                           }`}>
                           {trade.side}
                         </span>
@@ -1725,34 +1725,88 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Trade History (1/4 width) */}
+          {/* Trade History (1/4 width) - NOW WITH INDIVIDUAL TRADES */}
           <div className="lg:col-span-1 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-panel backdrop-blur h-full flex flex-col">
-              <h3 className="text-lg font-semibold mb-4">Trade History</h3>
+              <h3 className="text-lg font-semibold mb-4">📊 Trades Activos</h3>
               <div className="flex-grow overflow-y-auto custom-scrollbar h-[500px]">
                 <div className="space-y-2">
-                  {trades.length > 0 ? (
-                    trades.slice().reverse().map((trade) => (
-                      <div key={trade.id} className="flex items-center justify-between text-sm bg-black/20 p-2 rounded">
-                        <div className="flex items-center gap-2">
-                          <span title={trade.source === 'MANUAL' ? "Manual Trade" : "AI Auto-Trade"}>
-                            {trade.source === 'MANUAL' ? '👤' : '🤖'}
-                          </span>
-                          <span className={trade.side === 'BUY' ? 'text-green-400' : 'text-red-400'}>
-                            {trade.side}
+                  {activeTrades.length > 0 ? (
+                    activeTrades.map((trade) => (
+                      <div key={trade.id} className="bg-black/30 p-3 rounded-lg border border-white/5 hover:border-white/10 transition">
+                        {/* Trade Info Row */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={trade.side === 'LONG' ? 'text-green-400 text-xl' : 'text-red-400 text-xl'}>
+                              {trade.side === 'LONG' ? '↗' : '↘'}
+                            </span>
+                            <div>
+                              <div className="text-sm font-bold">{trade.side}</div>
+                              <div className="text-xs text-gray-400 font-mono">{trade.size.toFixed(4)} BTC</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-400">@ ${trade.entry_price.toLocaleString()}</div>
+                            <div className="text-xs text-gray-500">{new Date(trade.opened_at).toLocaleTimeString()}</div>
+                          </div>
+                        </div>
+
+                        {/* PnL Display */}
+                        <div className={`text-center py-2 rounded mb-2 font-mono font-bold ${trade.unrealized_pnl_usd >= 0
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
+                          }`}>
+                          {trade.unrealized_pnl_usd >= 0 ? '+' : ''}${trade.unrealized_pnl_usd.toFixed(2)}
+                          <span className="text-xs ml-2">
+                            ({trade.unrealized_pnl_pct >= 0 ? '+' : ''}{trade.unrealized_pnl_pct.toFixed(2)}%)
                           </span>
                         </div>
-                        <span className="font-mono text-foreground/70">
-                          @{trade.price?.toFixed(2)}
-                        </span>
-                        <span className="text-xs text-foreground/50">
-                          {new Date(trade.time * 1000).toLocaleTimeString()}
-                        </span>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`🛑 ¿Cerrar trade #${trade.id}?`)) return;
+                              try {
+                                const res = await fetch(`/api/trades/close/${trade.id}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert(`✅ Trade cerrado\nPnL: $${data.trade.pnl.toFixed(2)}`);
+                                }
+                              } catch (e) {
+                                alert("❌ Error");
+                              }
+                            }}
+                            className="flex-1 bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs font-bold transition"
+                            title="Cerrar este trade"
+                          >
+                            STOP
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/trades/reverse/${trade.id}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert(`🔄 Dirección cambiada a ${data.trade.side}`);
+                                }
+                              } catch (e) {
+                                alert("❌ Error");
+                              }
+                            }}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold transition"
+                            title="Invertir dirección (LONG↔SHORT)"
+                          >
+                            ⟲
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-center text-sm text-foreground/40">
-                      No trades yet...
+                    <p className="text-center text-sm text-foreground/40 mt-8">
+                      No hay trades activos...
+                      <br />
+                      <span className="text-xs">Haz clic en BUY para abrir uno</span>
                     </p>
                   )}
                 </div>
