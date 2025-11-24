@@ -734,28 +734,34 @@ async def get_position():
 @app.get("/api/trades/active")
 def get_active_trades():
     """Devuelve todos los trades abiertos con PnL en tiempo real."""
-    from trade_tracker import get_tracker
-    from data_collector import get_current_price
-    
-    tracker = get_tracker()
-    current_price = get_current_price("BTC", "USD")
-    
-    active_trades = tracker.get_active_trades()
-    
-    # DEBUG: Si no hay trades, crear uno de prueba
-    if len(active_trades) == 0:
-        print("[DEBUG] No hay trades, creando uno de prueba...")
-        tracker.open_trade(0.001, 85000, "LONG")
+    try:
+        from trade_tracker import get_tracker
+        from data_collector import get_current_price
+        
+        tracker = get_tracker()
+        current_price = get_current_price("BTC", "USD")
+        
         active_trades = tracker.get_active_trades()
-    
-    # Calcular PnL en vivo para cada trade
-    trades_with_pnl = []
-    for trade in active_trades:
-        trade_with_pnl = tracker.calculate_live_pnl(trade, current_price)
-        trades_with_pnl.append(trade_with_pnl)
-    
-    print(f"[API] Devolviendo {len(trades_with_pnl)} trades activos")
-    return {"trades": trades_with_pnl}
+        
+        # DEBUG: Si no hay trades, crear uno de prueba
+        if len(active_trades) == 0:
+            print("[DEBUG] No hay trades, creando uno de prueba...")
+            tracker.open_trade(0.001, 85000, "LONG")
+            active_trades = tracker.get_active_trades()
+        
+        # Calcular PnL en vivo para cada trade
+        trades_with_pnl = []
+        for trade in active_trades:
+            trade_with_pnl = tracker.calculate_live_pnl(trade, current_price)
+            trades_with_pnl.append(trade_with_pnl)
+        
+        print(f"[API] Devolviendo {len(trades_with_pnl)} trades activos")
+        return {"trades": trades_with_pnl}
+    except Exception as e:
+        print(f"[ERROR] /api/trades/active: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"trades": [], "error": str(e)}
 
 @app.post("/api/trades/close/{trade_id}")
 def close_single_trade(trade_id: int):
