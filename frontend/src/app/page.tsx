@@ -67,6 +67,9 @@ export default function Home() {
   const [position, setPosition] = useState<any>(null);
   const [activeTrades, setActiveTrades] = useState<any[]>([]);
 
+  // Symbol Selection
+  const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
+
   // Trading Configuration
   const [tradeSize, setTradeSize] = useState(0.001);
   const [brokerFee, setBrokerFee] = useState(0.1);
@@ -109,8 +112,9 @@ export default function Home() {
 
     // Show confirmation
     const confirmMsg = `📊 Resumen del Trade\n\n` +
+      `Símbolo: ${selectedSymbol}\n` +
       `Lado: ${side}\n` +
-      `Cantidad: ${tradeSize.toFixed(4)} BTC\n` +
+      `Cantidad: ${tradeSize.toFixed(4)} (base)\n` +
       `Precio: $${currentPrice.toFixed(2)}\n` +
       `Total: $${totalCost.toFixed(2)}\n` +
       `Comisión (${brokerFee}%): $${fee.toFixed(2)}\n` +
@@ -125,7 +129,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          symbol: "BTC_USD",
+          symbol: selectedSymbol.replace("/", "_"),
           side: side,
           size: tradeSize,
           stop_loss: slPrice,
@@ -136,7 +140,7 @@ export default function Home() {
 
       // Verificar si la orden fue exitosa
       if (data.status === "FILLED" || data.status === "SIMULATED") {
-        alert(`✅ Orden ${side} ejecutada!\nID: ${data.id}\nPrecio: ~$${currentPrice.toFixed(2)}`);
+        alert(`✅ Orden ${side} ejecutada!\nSímbolo: ${selectedSymbol}\nID: ${data.id}\nPrecio: ~$${currentPrice.toFixed(2)}`);
       } else if (data.error) {
         alert(`❌ Error: ${data.error}`);
       } else {
@@ -1070,6 +1074,30 @@ export default function Home() {
                 ) : (
                   <div className="text-2xl font-mono text-foreground/30">--.--</div>
                 )}
+              </div>
+
+              {/* Symbol Selector */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+                <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
+                <select
+                  value={selectedSymbol}
+                  onChange={(e) => setSelectedSymbol(e.target.value)}
+                  className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="BTC/USDT">₿ Bitcoin (BTC)</option>
+                  <option value="ETH/USDT">Ξ Ethereum (ETH)</option>
+                  <option value="BNB/USDT">⬥ Binance Coin (BNB)</option>
+                  <option value="SOL/USDT">◎ Solana (SOL)</option>
+                  <option value="XRP/USDT">✕ Ripple (XRP)</option>
+                  <option value="ADA/USDT">₳ Cardano (ADA)</option>
+                  <option value="AVAX/USDT">🔺 Avalanche (AVAX)</option>
+                  <option value="DOGE/USDT">Ð Dogecoin (DOGE)</option>
+                  <option value="DOT/USDT">● Polkadot (DOT)</option>
+                  <option value="MATIC/USDT">⬡ Polygon (MATIC)</option>
+                </select>
+                <div className="text-xs text-white/40 mt-2">
+                  Trading: <span className="text-blue-400 font-bold">{selectedSymbol}</span>
+                </div>
               </div>
 
               {/* 2. Trading Configuration */}
