@@ -38,22 +38,39 @@ _current_position = {
 _exchange_instance = None
 
 
-async def _get_exchange():
+async def _get_exchange(mode: Literal["testnet", "real"] = "real"):
     """
     Inicializa y retorna la instancia del exchange usando ccxt.
-    Lee credenciales de variables de entorno.
+    Lee credenciales de variables de entorno según el modo.
     """
     global _exchange_instance
+    
+    # Si ya existe una instancia, verificar si es del modo correcto (esto es simplificado, 
+    # idealmente deberíamos tener instancias separadas o reinicializar)
+    # Por ahora, forzamos reinicialización si cambiamos de modo
     if _exchange_instance:
-        return _exchange_instance
+        # Check if current instance matches requested mode (heuristic)
+        is_sandbox = _exchange_instance.urls['api'] == _exchange_instance.urls['test']
+        if (mode == "testnet" and not is_sandbox) or (mode == "real" and is_sandbox):
+            print(f"[BROKER] Switching exchange mode to {mode}...")
+            await _exchange_instance.close()
+            _exchange_instance = None
+        else:
+            return _exchange_instance
 
-    exchange_id = os.getenv("EXCHANGE_ID", "binance")  # Default to binance
-    api_key = os.getenv("EXCHANGE_API_KEY")
-    secret = os.getenv("EXCHANGE_SECRET")
-    password = os.getenv("EXCHANGE_PASSWORD") # Required for some exchanges like KuCoin/OKX
+    exchange_id = os.getenv("EXCHANGE_ID", "binance")
+    
+    if mode == "testnet":
+        api_key = os.getenv("BINANCE_TESTNET_KEY") or os.getenv("EXCHANGE_API_KEY")
+        secret = os.getenv("BINANCE_TESTNET_SECRET") or os.getenv("EXCHANGE_SECRET")
+        print("[BROKER] Initializing in TESTNET mode")
+    else:
+        api_key = os.getenv("BINANCE_REAL_KEY") or os.getenv("EXCHANGE_API_KEY")
+        secret = os.getenv("BINANCE_REAL_SECRET") or os.getenv("EXCHANGE_SECRET")
+        print("[BROKER] Initializing in REAL mode")
 
     if not api_key or not secret:
-        raise ValueError("Faltan credenciales: EXCHANGE_API_KEY y EXCHANGE_SECRET son requeridos para modo REAL.")
+        raise ValueError(f"Faltan credenciales para modo {mode}. Configure BINANCE_{mode.upper()}_KEY y SECRET.")
 
     try:
         exchange_class = getattr(ccxt, exchange_id)
@@ -61,28 +78,25 @@ async def _get_exchange():
             'apiKey': api_key,
             'secret': secret,
             'enableRateLimit': True,
+            'options': {'defaultType': 'spot'}
         }
-        if password:
-            exchange_config['password'] = password
 
         _exchange_instance = exchange_class(exchange_config)
         
-        # Activar modo Sandbox/Testnet si se requiere
-        is_sandbox = os.getenv("EXCHANGE_SANDBOX", "false").lower() == "true"
-        if is_sandbox:
+        # Activar modo Sandbox/Testnet
+        if mode == "testnet":
             _exchange_instance.set_sandbox_mode(True)
-            print(f"[REAL] 🧪 Modo Sandbox (Testnet) ACTIVADO para {exchange_id}")
         
-        # Cargar mercados (necesario para normalizar símbolos)
+        # Cargar mercados
         await _exchange_instance.load_markets()
-        print(f"[REAL] Conectado exitosamente a {exchange_id}")
+        print(f"[BROKER] Conectado exitosamente a {exchange_id} ({mode})")
         return _exchange_instance
     except Exception as e:
         print(f"[ERROR] Fallo al conectar con {exchange_id}: {e}")
         raise e
 
 
-async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) -> dict:
+async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real"]) -> dict:
     """
     Envía la orden al broker configurado o la simula.
     """
@@ -95,7 +109,7 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
     # Extract base currency from symbol (e.g., BTC from BTC/USDT)
     base_currency = symbol.split("/")[0]
 
-    # --- MODO DEMO ---
+    # --- MODO DEMO (PAPER) ---
     if mode == "demo":
         # Precio simulado (usaremos uno realista)
         current_price = 90000 + random.uniform(-500, 500)
@@ -120,7 +134,7 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 # Registrar en trade tracker
                 from trade_tracker import get_tracker
                 tracker = get_tracker()
-                tracker.open_trade(size, current_price, "LONG")
+                tracker.open_trade(size, current_price, "LONG", symbol=symbol)
                 
                 print(f"[SIMULATED] ✅ COMPRA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
                 return {
@@ -130,10 +144,62 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                     "details": {"side": "BUY", "amount": size, "cost": cost, "price": current_price, "symbol": symbol}
                 }
             else:
-                return {"status": "FAILED", "error": "Insufficient USDT balance"}
+                return {"status": "FAILED", "error": f"Insufficient USDT balance (Req: ${cost:.2f}, Avail: ${_simulated_balance['USDT']:.2f})"}
                 
         elif side == "SELL":
             if _simulated_balance.get(base_currency, 0) >= size:
+                _simulated_balance[base_currency] -= size
+                proceeds = size * current_price
+                _simulated_balance["USDT"] += proceeds
+                _trade_counter += 1
+                
+                # Actualizar posición
+                _current_position["size"] = _simulated_balance[base_currency]
+                _current_position["is_open"] = False # Simplificación: venta cierra posición
+                
+                # Registrar en trade tracker
+                from trade_tracker import get_tracker
+                tracker = get_tracker()
+                tracker.close_trade(f"SIM-{_trade_counter}", current_price, proceeds - (size * _current_position["entry_price"])) # PnL aprox
+                
+                print(f"[SIMULATED] ✅ VENTA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
+                return {
+                    "status": "FILLED",
+                    "id": f"SIM-{_trade_counter}",
+                    "price": current_price,
+                    "details": {"side": "SELL", "amount": size, "proceeds": proceeds, "price": current_price, "symbol": symbol}
+                }
+            else:
+                return {"status": "FAILED", "error": f"Insufficient {base_currency} balance"}
+
+    # --- MODO REAL / TESTNET ---
+    else:
+        try:
+            exchange = await _get_exchange(mode)
+            
+            # Normalizar símbolo para ccxt
+            market = exchange.market(symbol)
+            symbol_ccxt = market['symbol']
+            
+            # Ejecutar orden de mercado
+            order = await exchange.create_order(
+                symbol=symbol_ccxt,
+                type='market',
+                side=side.lower(),
+                amount=size
+            )
+            
+            print(f"[{mode.upper()}] ✅ Orden ejecutada: {order['id']}")
+            return {
+                "status": "FILLED",
+                "id": order['id'],
+                "price": order.get('price', 0) or order.get('average', 0),
+                "details": order
+            }
+            
+        except Exception as e:
+            print(f"[{mode.upper()}] ❌ Error ejecutando orden: {e}")
+            return {"status": "FAILED", "error": str(e)}
                 _simulated_balance[base_currency] -= size
                 proceeds = size * current_price
                 _simulated_balance["USDT"] += proceeds

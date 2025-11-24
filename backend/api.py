@@ -107,17 +107,9 @@ async def api_run_backtest():
 
 
 @app.post("/api/trade")
-async def api_trade(payload: dict):
+async def place_trade(payload: dict):
+    """Recibe orden de compra/venta y la ejecuta según el modo actual."""
     from broker_api_handler import execute_order
-    import os
-    
-    # Determine mode from env var (default to demo for safety)
-    mode = os.getenv("TRADING_MODE", "demo")
-    
-    result = await execute_order(payload, mode=mode)
-    
-    # Actualizar estado de la estrategia si la orden fue exitosa
-    if result.get("status") in ["FILLED", "SIMULATED"]:
         _strategy_instance.register_trade(
             side=payload["side"],
             price=result["price"],
@@ -157,6 +149,7 @@ _strategy_instance = RiskStrategy()
 _optimizer_instance = Optimizer(_strategy_instance)
 _data_task = None
 _current_symbol = "BTC/USDT"
+_trading_mode = "demo" # demo, testnet, real
 
 @app.on_event("startup")
 async def startup_event():
@@ -215,6 +208,23 @@ async def set_symbol(payload: dict):
     _strategy_instance.last_price = 0.0
     
     return {"status": "success", "symbol": _current_symbol}
+
+@app.get("/api/trading/mode")
+def get_trading_mode():
+    """Retorna el modo de trading actual."""
+    return {"mode": _trading_mode}
+
+@app.post("/api/trading/mode")
+def set_trading_mode(payload: dict):
+    """Cambia el modo de trading (demo, testnet, real)."""
+    global _trading_mode
+    new_mode = payload.get("mode")
+    if new_mode not in ["demo", "testnet", "real"]:
+        return {"error": "Invalid mode. Use: demo, testnet, real"}
+    
+    _trading_mode = new_mode
+    print(f"[API] Trading mode switched to: {_trading_mode.upper()}")
+    return {"status": "success", "mode": _trading_mode}
 
 @app.get("/api/trades")
 def get_trades():
