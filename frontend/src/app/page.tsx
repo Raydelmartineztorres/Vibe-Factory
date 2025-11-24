@@ -1090,979 +1090,977 @@ export default function Home() {
                 )}
               </div>
 
-              {/* 2. Trading Configuration Panel */}
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Symbol Selector */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur space-y-4">
 
-                {/* Trading Mode & Symbol Selector */}
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur space-y-4">
+                {/* Trading Mode Selector */}
+                <div>
+                  <label className="text-xs text-white/60 block mb-2">🎮 Trading Mode</label>
+                  <select
+                    value={tradingMode}
+                    onChange={async (e) => {
+                      const newMode = e.target.value;
+                      setTradingMode(newMode);
+                      try {
+                        await fetch("/api/trading/mode", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ mode: newMode }),
+                        });
+                        alert(`Mode switched to ${newMode.toUpperCase()}`);
+                      } catch (err) {
+                        console.error("Failed to set mode:", err);
+                      }
+                    }}
+                    className={`w-full px-3 py-2 border rounded font-mono text-sm focus:outline-none cursor-pointer ${tradingMode === 'real' ? 'bg-red-900/30 border-red-500/50 text-red-400' :
+                      tradingMode === 'testnet' ? 'bg-yellow-900/30 border-yellow-500/50 text-yellow-400' :
+                        'bg-black/30 border-white/10 text-white'
+                      }`}
+                  >
+                    <option value="demo">📝 Paper Trading (Internal Sim)</option>
+                    <option value="testnet">🧪 Binance Testnet (Sandbox)</option>
+                    <option value="real">🚀 Binance Real (Mainnet)</option>
+                  </select>
+                </div>
 
-                  {/* Trading Mode Selector */}
-                  <div>
-                    <label className="text-xs text-white/60 block mb-2">🎮 Trading Mode</label>
-                    <select
-                      value={tradingMode}
-                      onChange={async (e) => {
-                        const newMode = e.target.value;
-                        setTradingMode(newMode);
-                        try {
-                          await fetch("/api/trading/mode", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ mode: newMode }),
-                          });
-                          alert(`Mode switched to ${newMode.toUpperCase()}`);
-                        } catch (err) {
-                          console.error("Failed to set mode:", err);
-                        }
-                      }}
-                      className={`w-full px-3 py-2 border rounded font-mono text-sm focus:outline-none cursor-pointer ${tradingMode === 'real' ? 'bg-red-900/30 border-red-500/50 text-red-400' :
-                        tradingMode === 'testnet' ? 'bg-yellow-900/30 border-yellow-500/50 text-yellow-400' :
-                          'bg-black/30 border-white/10 text-white'
-                        }`}
-                    >
-                      <option value="demo">📝 Paper Trading (Internal Sim)</option>
-                      <option value="testnet">🧪 Binance Testnet (Sandbox)</option>
-                      <option value="real">🚀 Binance Real (Mainnet)</option>
-                    </select>
+                {/* Symbol Selector */}
+                <div>
+                  <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
+                  <select
+                    value={selectedSymbol}
+                    onChange={async (e) => {
+                      const newSymbol = e.target.value;
+                      setSelectedSymbol(newSymbol);
+
+                      // Reset trade size based on asset class (heuristic)
+                      if (newSymbol.includes("BTC") || newSymbol.includes("ETH")) {
+                        setTradeSize(0.001);
+                      } else {
+                        setTradeSize(10.0); // Default for cheaper assets
+                      }
+
+                      // Notificar al backend para cambiar el feed de datos
+                      try {
+                        await fetch("/api/set_symbol", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ symbol: newSymbol }),
+                        });
+                        // Resetear datos visuales
+                        setMlPrediction(null);
+                        if (candlestickSeriesRef.current) candlestickSeriesRef.current.setData([]);
+                      } catch (err) {
+                        console.error("Failed to set symbol:", err);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="BTC/USDT">₿ Bitcoin (BTC)</option>
+                    <option value="ETH/USDT">Ξ Ethereum (ETH)</option>
+                    <option value="BNB/USDT">⬥ Binance Coin (BNB)</option>
+                    <option value="SOL/USDT">◎ Solana (SOL)</option>
+                    <option value="XRP/USDT">✕ Ripple (XRP)</option>
+                    <option value="ADA/USDT">₳ Cardano (ADA)</option>
+                    <option value="AVAX/USDT">🔺 Avalanche (AVAX)</option>
+                    <option value="DOGE/USDT">Ð Dogecoin (DOGE)</option>
+                    <option value="DOT/USDT">● Polkadot (DOT)</option>
+                    <option value="MATIC/USDT">⬡ Polygon (MATIC)</option>
+                  </select>
+                  <div className="text-xs text-white/40 mt-2">
+                    Trading: <span className="text-blue-400 font-bold">{selectedSymbol}</span>
                   </div>
+                </div>
+              </div>
 
-                  {/* Symbol Selector */}
-                  <div>
-                    <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
-                    <select
-                      value={selectedSymbol}
-                      onChange={async (e) => {
-                        const newSymbol = e.target.value;
-                        setSelectedSymbol(newSymbol);
+              {/* 2. Trading Configuration */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col gap-3">
+                <h4 className="text-sm font-bold text-white/80">⚙️ Configuración de Trading</h4>
 
-                        // Reset trade size based on asset class (heuristic)
-                        if (newSymbol.includes("BTC") || newSymbol.includes("ETH")) {
-                          setTradeSize(0.001);
-                        } else {
-                          setTradeSize(10.0); // Default for cheaper assets
-                        }
-
-                        // Notificar al backend para cambiar el feed de datos
-                        try {
-                          await fetch("/api/set_symbol", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ symbol: newSymbol }),
-                          });
-                          // Resetear datos visuales
-                          setMlPrediction(null);
-                          if (candlestickSeriesRef.current) candlestickSeriesRef.current.setData([]);
-                        } catch (err) {
-                          console.error("Failed to set symbol:", err);
-                        }
-                      }}
-                      className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none cursor-pointer"
-                    >
-                      <option value="BTC/USDT">₿ Bitcoin (BTC)</option>
-                      <option value="ETH/USDT">Ξ Ethereum (ETH)</option>
-                      <option value="BNB/USDT">⬥ Binance Coin (BNB)</option>
-                      <option value="SOL/USDT">◎ Solana (SOL)</option>
-                      <option value="XRP/USDT">✕ Ripple (XRP)</option>
-                      <option value="ADA/USDT">₳ Cardano (ADA)</option>
-                      <option value="AVAX/USDT">🔺 Avalanche (AVAX)</option>
-                      <option value="DOGE/USDT">Ð Dogecoin (DOGE)</option>
-                      <option value="DOT/USDT">● Polkadot (DOT)</option>
-                      <option value="MATIC/USDT">⬡ Polygon (MATIC)</option>
-                    </select>
-                    <div className="text-xs text-white/40 mt-2">
-                      Trading: <span className="text-blue-400 font-bold">{selectedSymbol}</span>
-                    </div>
-                  </div>
-
-                  {/* 2. Trading Configuration */}
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col gap-3">
-                    <h4 className="text-sm font-bold text-white/80">⚙️ Configuración de Trading</h4>
-
-                    {/* Trade Size */}
-                    <div>
-                      <label className="text-xs text-white/60">Cantidad (BTC)</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={tradeSize}
-                        onChange={(e) => setTradeSize(parseFloat(e.target.value) || 0)}
-                        className="w-full mt-1 px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
-                      />
-                      <div className="text-xs text-white/40 mt-1">
-                        ≈ ${((tradeSize * (livePrice || 86000))).toFixed(2)} USD
-                      </div>
-                    </div>
-
-                    {/* Broker Fee */}
-                    <div>
-                      <label className="text-xs text-white/60">Comisión del Broker (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={brokerFee}
-                        onChange={(e) => setBrokerFee(parseFloat(e.target.value) || 0)}
-                        className="w-full mt-1 px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Stop Loss */}
-                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
-                      <input
-                        type="checkbox"
-                        checked={stopLossEnabled}
-                        onChange={(e) => setStopLossEnabled(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <div className="flex-1">
-                        <label className="text-xs text-red-400 font-bold">Stop Loss</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          disabled={!stopLossEnabled}
-                          value={stopLossPercent}
-                          onChange={(e) => setStopLossPercent(parseFloat(e.target.value) || 0)}
-                          className="w-full mt-1 px-2 py-1 bg-black/30 border border-red-500/30 rounded text-red-400 font-mono text-xs disabled:opacity-30 focus:border-red-500 focus:outline-none"
-                          placeholder="%"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Take Profit */}
-                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
-                      <input
-                        type="checkbox"
-                        checked={takeProfitEnabled}
-                        onChange={(e) => setTakeProfitEnabled(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <div className="flex-1">
-                        <label className="text-xs text-green-400 font-bold">Take Profit</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          disabled={!takeProfitEnabled}
-                          value={takeProfitPercent}
-                          onChange={(e) => setTakeProfitPercent(parseFloat(e.target.value) || 0)}
-                          className="w-full mt-1 px-2 py-1 bg-black/30 border border-green-500/30 rounded text-green-400 font-mono text-xs disabled:opacity-30 focus:border-green-500 focus:outline-none"
-                          placeholder="%"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. Manual Controls */}
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => executeTrade("BUY")}
-                        className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/50 py-3 rounded-lg font-bold transition-all active:scale-95"
-                      >
-                        BUY / LONG
-                      </button>
-                      <button
-                        onClick={() => executeTrade("SELL")}
-                        className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 py-3 rounded-lg font-bold transition-all active:scale-95"
-                      >
-                        SELL / SHORT
-                      </button>
-                    </div>
-                    <button
-                      onClick={toggleTrading}
-                      className={`w-full py-2 rounded-lg font-mono text-sm border transition-all ${tradingEnabled
-                        ? "bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20"
-                        : "bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20"
-                        }`}
-                    >
-                      {tradingEnabled ? "🛑 PAUSE AUTO-TRADING" : "▶ RESUME AUTO-TRADING"}
-                    </button>
-
-                    {/* AI Advice Button - Only visible when trading is paused */}
-                    {!tradingEnabled && (
-                      <button
-                        onClick={getAIAdvice}
-                        className="w-full py-2 rounded-lg font-mono text-sm border bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 transition-all"
-                      >
-                        🤖 OBTENER CONSEJO DE IA
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 3. Last Trade Info */}
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col justify-center">
-                    <p className="text-xs uppercase tracking-wider text-gray-400 font-medium mb-1">Last Trade</p>
-                    {lastTrade ? (
-                      <>
-                        <div className="text-3xl font-bold font-mono">
-                          <span className={lastTrade.side === 'BUY' ? 'text-green-400' : 'text-red-400'}>
-                            {lastTrade.side}
-                          </span>
-                          <span className="text-sm text-gray-500 ml-2">@ {lastTrade.price?.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm mt-2">
-                          <span className="text-gray-400">Size: {lastTrade.size?.toFixed(3)} BTC</span>
-                          <span className="text-gray-400">
-                            {lastTrade.time ? new Date(lastTrade.time * 1000).toLocaleTimeString() : 'N/A'}
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="py-8 text-center text-foreground/40">No trade yet</p>
-                    )}
+                {/* Trade Size */}
+                <div>
+                  <label className="text-xs text-white/60">Cantidad (BTC)</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={tradeSize}
+                    onChange={(e) => setTradeSize(parseFloat(e.target.value) || 0)}
+                    className="w-full mt-1 px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                  <div className="text-xs text-white/40 mt-1">
+                    ≈ ${((tradeSize * (livePrice || 86000))).toFixed(2)} USD
                   </div>
                 </div>
 
-                {/* AI Advice Panel */}
-                {aiAdvice && (
-                  <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 backdrop-blur">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold text-purple-300 flex items-center gap-2">
-                        🤖 Consejo de IA
-                        <span className={`text-xs px-2 py-0.5 rounded ${aiAdvice.confidence === 'high' ? 'bg-green-500/20 text-green-400' :
-                          aiAdvice.confidence === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-gray-500/20 text-gray-400'
-                          }`}>
-                          {aiAdvice.confidence === 'high' ? 'Alta confianza' :
-                            aiAdvice.confidence === 'medium' ? 'Media confianza' : 'Baja confianza'}
-                        </span>
-                      </h3>
-                      <button
-                        onClick={() => setAiAdvice(null)}
-                        className="text-foreground/40 hover:text-foreground/80 transition-colors text-lg"
-                      >
-                        ✕
-                      </button>
+                {/* Broker Fee */}
+                <div>
+                  <label className="text-xs text-white/60">Comisión del Broker (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={brokerFee}
+                    onChange={(e) => setBrokerFee(parseFloat(e.target.value) || 0)}
+                    className="w-full mt-1 px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Stop Loss */}
+                <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
+                  <input
+                    type="checkbox"
+                    checked={stopLossEnabled}
+                    onChange={(e) => setStopLossEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <label className="text-xs text-red-400 font-bold">Stop Loss</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      disabled={!stopLossEnabled}
+                      value={stopLossPercent}
+                      onChange={(e) => setStopLossPercent(parseFloat(e.target.value) || 0)}
+                      className="w-full mt-1 px-2 py-1 bg-black/30 border border-red-500/30 rounded text-red-400 font-mono text-xs disabled:opacity-30 focus:border-red-500 focus:outline-none"
+                      placeholder="%"
+                    />
+                  </div>
+                </div>
+
+                {/* Take Profit */}
+                <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
+                  <input
+                    type="checkbox"
+                    checked={takeProfitEnabled}
+                    onChange={(e) => setTakeProfitEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <label className="text-xs text-green-400 font-bold">Take Profit</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      disabled={!takeProfitEnabled}
+                      value={takeProfitPercent}
+                      onChange={(e) => setTakeProfitPercent(parseFloat(e.target.value) || 0)}
+                      className="w-full mt-1 px-2 py-1 bg-black/30 border border-green-500/30 rounded text-green-400 font-mono text-xs disabled:opacity-30 focus:border-green-500 focus:outline-none"
+                      placeholder="%"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Manual Controls */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => executeTrade("BUY")}
+                    className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/50 py-3 rounded-lg font-bold transition-all active:scale-95"
+                  >
+                    BUY / LONG
+                  </button>
+                  <button
+                    onClick={() => executeTrade("SELL")}
+                    className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 py-3 rounded-lg font-bold transition-all active:scale-95"
+                  >
+                    SELL / SHORT
+                  </button>
+                </div>
+                <button
+                  onClick={toggleTrading}
+                  className={`w-full py-2 rounded-lg font-mono text-sm border transition-all ${tradingEnabled
+                    ? "bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20"
+                    : "bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20"
+                    }`}
+                >
+                  {tradingEnabled ? "🛑 PAUSE AUTO-TRADING" : "▶ RESUME AUTO-TRADING"}
+                </button>
+
+                {/* AI Advice Button - Only visible when trading is paused */}
+                {!tradingEnabled && (
+                  <button
+                    onClick={getAIAdvice}
+                    className="w-full py-2 rounded-lg font-mono text-sm border bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 transition-all"
+                  >
+                    🤖 OBTENER CONSEJO DE IA
+                  </button>
+                )}
+              </div>
+
+              {/* 3. Last Trade Info */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col justify-center">
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-medium mb-1">Last Trade</p>
+                {lastTrade ? (
+                  <>
+                    <div className="text-3xl font-bold font-mono">
+                      <span className={lastTrade.side === 'BUY' ? 'text-green-400' : 'text-red-400'}>
+                        {lastTrade.side}
+                      </span>
+                      <span className="text-sm text-gray-500 ml-2">@ {lastTrade.price?.toFixed(2)}</span>
                     </div>
-                    <p className="text-sm text-white mb-3 leading-relaxed whitespace-pre-line font-medium">
-                      {aiAdvice.advice}
-                    </p>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span className="text-gray-400">Size: {lastTrade.size?.toFixed(3)} BTC</span>
+                      <span className="text-gray-400">
+                        {lastTrade.time ? new Date(lastTrade.time * 1000).toLocaleTimeString() : 'N/A'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="py-8 text-center text-foreground/40">No trade yet</p>
+                )}
+              </div>
+            </div>
 
-                    {/* Trade Setup Box */}
-                    {aiAdvice.action !== 'wait' && aiAdvice.trade_setup && (
-                      <div className="mb-3 p-3 bg-black/40 rounded border border-white/10 grid grid-cols-3 gap-2 text-center">
-                        <div>
-                          <span className="text-[10px] text-yellow-400/70 uppercase block">Entry</span>
-                          <span className="font-mono text-yellow-400 font-bold">${aiAdvice.trade_setup.entry}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-red-400/70 uppercase block">Stop Loss</span>
-                          <span className="font-mono text-red-400 font-bold">${aiAdvice.trade_setup.sl}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-green-400/70 uppercase block">Take Profit</span>
-                          <span className="font-mono text-green-400 font-bold">${aiAdvice.trade_setup.tp}</span>
-                        </div>
-                      </div>
-                    )}
+            {/* AI Advice Panel */}
+            {aiAdvice && (
+              <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 backdrop-blur">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-purple-300 flex items-center gap-2">
+                    🤖 Consejo de IA
+                    <span className={`text-xs px-2 py-0.5 rounded ${aiAdvice.confidence === 'high' ? 'bg-green-500/20 text-green-400' :
+                      aiAdvice.confidence === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                      {aiAdvice.confidence === 'high' ? 'Alta confianza' :
+                        aiAdvice.confidence === 'medium' ? 'Media confianza' : 'Baja confianza'}
+                    </span>
+                  </h3>
+                  <button
+                    onClick={() => setAiAdvice(null)}
+                    className="text-foreground/40 hover:text-foreground/80 transition-colors text-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-sm text-white mb-3 leading-relaxed whitespace-pre-line font-medium">
+                  {aiAdvice.advice}
+                </p>
 
-                    <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-                      <div className="flex gap-3">
-                        <span className="text-purple-300 font-mono">RSI: {aiAdvice.indicators.rsi}</span>
-                        <span className="text-blue-300 font-mono">ATR: {aiAdvice.indicators.atr}</span>
-                        <span className="text-white/60">{aiAdvice.indicators.trend} / {aiAdvice.indicators.volatility}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {aiAdvice.win_probability && (
-                          <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded font-mono font-bold border border-yellow-500/20">
-                            🎯 {aiAdvice.win_probability}% Win Prob
-                          </span>
-                        )}
-                        <span className={`px-3 py-1 rounded font-mono font-bold ${aiAdvice.action === 'buy' ? 'bg-green-500/20 text-green-400' :
-                          aiAdvice.action === 'sell' ? 'bg-red-500/20 text-red-400' :
-                            'bg-gray-500/20 text-gray-400'
-                          }`}>
-                          {aiAdvice.action === 'buy' ? '📈 COMPRAR' :
-                            aiAdvice.action === 'sell' ? '📉 VENDER' : '⏸️ ESPERAR'}
-                        </span>
-                      </div>
+                {/* Trade Setup Box */}
+                {aiAdvice.action !== 'wait' && aiAdvice.trade_setup && (
+                  <div className="mb-3 p-3 bg-black/40 rounded border border-white/10 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <span className="text-[10px] text-yellow-400/70 uppercase block">Entry</span>
+                      <span className="font-mono text-yellow-400 font-bold">${aiAdvice.trade_setup.entry}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-red-400/70 uppercase block">Stop Loss</span>
+                      <span className="font-mono text-red-400 font-bold">${aiAdvice.trade_setup.sl}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-green-400/70 uppercase block">Take Profit</span>
+                      <span className="font-mono text-green-400 font-bold">${aiAdvice.trade_setup.tp}</span>
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* 4. AI Brain Dashboard (Enhanced) */}
-                  <div className="md:col-span-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-4 backdrop-blur">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-500/20 rounded-lg">
-                          <span className="text-2xl">🧠</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-purple-300">AI Learning System</p>
-                          <p className="text-xs text-purple-200/50">Self-Optimizing Trading Bot</p>
-                        </div>
-                        {marketStatus && (
-                          <div className={`ml-4 px-3 py-1 rounded-full border text-xs font-mono flex items-center gap-2 ${marketStatus.is_peak
-                            ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
-                            : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
-                            }`}>
-                            <span>{marketStatus.is_peak ? '🔥 PEAK HOURS' : '🌙 OFF HOURS'}</span>
-                            <span className="opacity-50">|</span>
-                            <span>{marketStatus.aggressiveness}x Aggro</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* ML Prediction Panel */}
-                    <div className="mb-4 bg-black/20 rounded-lg p-4 border border-purple-500/20">
-                      <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
-                        <span>🤖</span> Predicción en Tiempo Real
-                        {mlPrediction?.is_trained && <span className="text-[10px] bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full border border-green-500/30">Modelo Entrenado</span>}
-                      </h3>
-
-                      {mlPrediction ? (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
-                            <div className="text-gray-400 text-xs mb-1">Señal ML</div>
-                            <div className={`text-xl font-bold ${mlPrediction.signal === 'BUY' ? 'text-green-400' :
-                              mlPrediction.signal === 'SELL' ? 'text-red-400' :
-                                'text-gray-400'
-                              }`}>
-                              {mlPrediction.signal}
-                            </div>
-                          </div>
-                          <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
-                            <div className="text-gray-400 text-xs mb-1">Precio Predicho</div>
-                            <div className="text-xl font-mono text-blue-300">
-                              ${mlPrediction.predicted_price?.toFixed(2) || '---'}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-500 py-2 text-sm">
-                          Cargando modelo...
-                        </div>
-                      )}
-                    </div>
-
-                    {memoryStats && (
-                      <div className="px-3 py-1 bg-purple-500/20 rounded-full border border-purple-500/30">
-                        <span className="text-xs text-purple-300 font-mono">
-                          {memoryStats.total_trades || 0} Experiences
-                        </span>
-                      </div>
+                <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                  <div className="flex gap-3">
+                    <span className="text-purple-300 font-mono">RSI: {aiAdvice.indicators.rsi}</span>
+                    <span className="text-blue-300 font-mono">ATR: {aiAdvice.indicators.atr}</span>
+                    <span className="text-white/60">{aiAdvice.indicators.trend} / {aiAdvice.indicators.volatility}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {aiAdvice.win_probability && (
+                      <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded font-mono font-bold border border-yellow-500/20">
+                        🎯 {aiAdvice.win_probability}% Win Prob
+                      </span>
                     )}
-
-
-                    {/* Risk Manager Panel */}
-                    <div className="mb-4 bg-black/20 rounded-lg p-4 border border-red-500/20">
-                      <h3 className="text-sm font-bold text-red-300 mb-3 flex items-center gap-2">
-                        <span>🛡️</span> Risk Manager Shield
-                        {riskStats && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${riskStats.drawdown_state === 'NORMAL' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
-                            riskStats.drawdown_state === 'STOP' ? 'bg-red-900/50 text-red-300 border-red-500/30' :
-                              'bg-yellow-900/50 text-yellow-300 border-yellow-500/30'
-                            }`}>
-                            {riskStats.drawdown_state}
-                          </span>
-                        )}
-                      </h3>
-
-                      {riskStats ? (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
-                            <div className="text-[10px] text-gray-400">Trailing Stops</div>
-                            <div className="text-lg font-mono font-bold text-blue-300">
-                              {riskStats.trailing_stops_active}
-                            </div>
-                          </div>
-                          <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
-                            <div className="text-[10px] text-gray-400">Pyramids</div>
-                            <div className="text-lg font-mono font-bold text-purple-300">
-                              {riskStats.pyramid_positions}
-                            </div>
-                          </div>
-                          <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
-                            <div className="text-[10px] text-gray-400">Drawdown</div>
-                            <div className={`text-lg font-mono font-bold ${riskStats.daily_drawdown > 5 ? 'text-red-400' : 'text-green-400'
-                              }`}>
-                              {riskStats.daily_drawdown}%
-                            </div>
-                          </div>
-                          <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
-                            <div className="text-[10px] text-gray-400">Peak Balance</div>
-                            <div className="text-lg font-mono font-bold text-gray-300">
-                              ${riskStats.peak_balance}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-500 py-2 text-sm">
-                          Cargando stats...
-                        </div>
-                      )}
+                    <span className={`px-3 py-1 rounded font-mono font-bold ${aiAdvice.action === 'buy' ? 'bg-green-500/20 text-green-400' :
+                      aiAdvice.action === 'sell' ? 'bg-red-500/20 text-red-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                      {aiAdvice.action === 'buy' ? '📈 COMPRAR' :
+                        aiAdvice.action === 'sell' ? '📉 VENDER' : '⏸️ ESPERAR'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 4. AI Brain Dashboard (Enhanced) */}
+              <div className="md:col-span-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-4 backdrop-blur">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <span className="text-2xl">🧠</span>
                     </div>
-
-                    {memoryStats && memoryStats.total_trades > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {/* Win Rate with tooltip */}
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Win Rate: Porcentaje de trades ganadores. ≥50% = más victorias que derrotas"
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Win Rate ℹ️</p>
-                          <p className={`text-2xl font-mono font-bold ${memoryStats.win_rate >= 50 ? 'text-green-400' : 'text-yellow-400'
-                            }`}>
-                            {memoryStats.win_rate}%
-                          </p>
-                          <p className="text-xs text-foreground/40 mt-1">
-                            {memoryStats.total_wins}W / {memoryStats.total_losses}L
-                          </p>
-                        </div>
-
-                        {/* Average PnL with tooltip */}
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Avg PnL: Ganancia o pérdida promedio por cada operación realizada."
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Avg PnL/Trade ℹ️</p>
-                          <p className={`text-2xl font-mono font-bold ${memoryStats.average_pnl >= 0 ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                            ${memoryStats.average_pnl}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">Per trade</p>
-                        </div>
-
-                        {/* Best Context with tooltip */}
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Best Setup: La condición de mercado (Tendencia/Volatilidad) donde el bot gana más frecuentemente."
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Best Setup ℹ️</p>
-                          <p className="text-lg font-mono font-bold text-green-400">
-                            {memoryStats.best_context?.context || 'N/A'}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {memoryStats.best_context ? `${memoryStats.best_context.win_rate.toFixed(0)}% WR` : ''}
-                          </p>
-                        </div>
-
-                        {/* Worst Context with tooltip */}
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Avoid: La condición de mercado donde el bot suele perder. El bot intentará evitar operar aquí."
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Avoid ℹ️</p>
-                          <p className="text-lg font-mono font-bold text-red-400">
-                            {memoryStats.worst_context?.context || 'N/A'}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {memoryStats.worst_context ? `${memoryStats.worst_context.win_rate.toFixed(0)}% WR` : ''}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-foreground/30 text-sm">
-                        Waiting for first trade experience...
+                    <div>
+                      <p className="text-sm font-bold text-purple-300">AI Learning System</p>
+                      <p className="text-xs text-purple-200/50">Self-Optimizing Trading Bot</p>
+                    </div>
+                    {marketStatus && (
+                      <div className={`ml-4 px-3 py-1 rounded-full border text-xs font-mono flex items-center gap-2 ${marketStatus.is_peak
+                        ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
+                        : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                        }`}>
+                        <span>{marketStatus.is_peak ? '🔥 PEAK HOURS' : '🌙 OFF HOURS'}</span>
+                        <span className="opacity-50">|</span>
+                        <span>{marketStatus.aggressiveness}x Aggro</span>
                       </div>
                     )}
                   </div>
+                </div>
 
-                  {/* Market Sentiment Dashboard */}
-                  {sentiment && (
-                    <div className="md:col-span-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4 backdrop-blur mb-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-purple-500/20 rounded-lg">
-                            <span className="text-2xl">📰</span>
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-purple-300">Market Sentiment</p>
-                            <p className="text-xs text-purple-200/50">Análisis en Tiempo Real</p>
-                          </div>
-                        </div>
-                        <div className={`px-3 py-1 rounded-full border text-sm font-bold ${sentiment.overall === 'bullish'
-                          ? 'bg-green-900/50 text-green-300 border-green-500/30'
-                          : sentiment.overall === 'bearish'
-                            ? 'bg-red-900/50 text-red-300 border-red-500/30'
-                            : 'bg-gray-900/50 text-gray-300 border-gray-500/30'
+                {/* ML Prediction Panel */}
+                <div className="mb-4 bg-black/20 rounded-lg p-4 border border-purple-500/20">
+                  <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                    <span>🤖</span> Predicción en Tiempo Real
+                    {mlPrediction?.is_trained && <span className="text-[10px] bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full border border-green-500/30">Modelo Entrenado</span>}
+                  </h3>
+
+                  {mlPrediction ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
+                        <div className="text-gray-400 text-xs mb-1">Señal ML</div>
+                        <div className={`text-xl font-bold ${mlPrediction.signal === 'BUY' ? 'text-green-400' :
+                          mlPrediction.signal === 'SELL' ? 'text-red-400' :
+                            'text-gray-400'
                           }`}>
-                          {sentiment.overall === 'bullish' && '🐂 BULLISH'}
-                          {sentiment.overall === 'bearish' && '🐻 BEARISH'}
-                          {sentiment.overall === 'neutral' && '😐 NEUTRAL'}
+                          {mlPrediction.signal}
                         </div>
                       </div>
-
-                      {/* Sentiment Score Bar */}
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-gray-400">Sentiment Score</span>
-                          <span className="text-xs font-mono text-purple-300">{sentiment.score.toFixed(2)}</span>
+                      <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
+                        <div className="text-gray-400 text-xs mb-1">Precio Predicho</div>
+                        <div className="text-xl font-mono text-blue-300">
+                          ${mlPrediction.predicted_price?.toFixed(2) || '---'}
                         </div>
-                        <div className="h-2 bg-black/30 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${sentiment.score > 0 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-gradient-to-r from-red-500 to-red-400'
-                              }`}
-                            style={{
-                              width: `${Math.abs(sentiment.score) * 50}%`,
-                              marginLeft: sentiment.score < 0 ? `${50 + (sentiment.score * 50)}%` : '50%'
-                            }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[10px] text-gray-500 mt-1">
-                          <span>-1.0 (Bearish)</span>
-                          <span>0.0</span>
-                          <span>+1.0 (Bullish)</span>
-                        </div>
-                      </div>
-
-                      {/* Stats */}
-                      <div className="grid grid-cols-3 gap-3 mb-4">
-                        <div className="bg-black/20 rounded-lg p-2 text-center">
-                          <div className="text-[10px] text-gray-400">Confidence</div>
-                          <div className={`text-sm font-mono font-bold ${sentiment.confidence === 'high' ? 'text-green-400' :
-                            sentiment.confidence === 'medium' ? 'text-yellow-400' :
-                              'text-gray-400'
-                            }`}>
-                            {sentiment.confidence.toUpperCase()}
-                          </div>
-                        </div>
-                        <div className="bg-black/20 rounded-lg p-2 text-center">
-                          <div className="text-[10px] text-gray-400">Trend</div>
-                          <div className="text-sm font-mono font-bold text-purple-300">
-                            {sentiment.trend === 'improving' && '📈'}
-                            {sentiment.trend === 'worsening' && '📉'}
-                            {sentiment.trend === 'stable' && '➡️'}
-                            {' '}{sentiment.trend.toUpperCase()}
-                          </div>
-                        </div>
-                        <div className="bg-black/20 rounded-lg p-2 text-center">
-                          <div className="text-[10px] text-gray-400">News</div>
-                          <div className="text-sm font-mono font-bold text-blue-300">
-                            {sentiment.news_count}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Recent Events */}
-                      {sentiment.recent_events && sentiment.recent_events.length > 0 && (
-                        <div className="mt-4">
-                          <div className="text-xs text-gray-400 mb-2 font-bold">📡 Latest News:</div>
-                          <div className="space-y-2">
-                            {sentiment.recent_events.slice(0, 3).map((news: any, i: number) => (
-                              <div key={i} className="bg-black/20 rounded p-2 text-xs hover:bg-black/30 transition-colors">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-lg flex-shrink-0">
-                                    {news.sentiment?.sentiment === 'positive' && '🟢'}
-                                    {news.sentiment?.sentiment === 'negative' && '🔴'}
-                                    {news.sentiment?.sentiment === 'neutral' && '🟡'}
-                                  </span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-gray-300 line-clamp-2">{news.title}</p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-[10px] text-gray-500">{news.source}</span>
-                                      <span className="text-[10px] text-purple-400">
-                                        Score: {news.sentiment?.score?.toFixed(2)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* System Health Dashboard */}
-                  {systemHealth && (
-                    <div className="md:col-span-3 rounded-xl border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4 backdrop-blur mb-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-green-500/20 rounded-lg">
-                            <span className="text-2xl">⚡</span>
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-green-300">System Health</p>
-                            <p className="text-xs text-green-200/50">Status & Performance Monitoring</p>
-                          </div>
-                        </div>
-                        <div className={`px-3 py-1 rounded-full border ${systemHealth.status === 'online'
-                          ? 'bg-green-900/50 text-green-300 border-green-500/30'
-                          : 'bg-red-900/50 text-red-300 border-red-500/30'
-                          }`}>
-                          <span className="text-xs font-mono">
-                            {systemHealth.status === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                        <div className="bg-black/20 rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-400 mb-1">Uptime</div>
-                          <div className="text-lg font-mono font-bold text-green-300">
-                            {Math.floor(systemHealth.uptime / 60)}m
-                          </div>
-                        </div>
-                        <div className="bg-black/20 rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-400 mb-1">Experiencias</div>
-                          <div className="text-lg font-mono font-bold text-blue-300">
-                            {systemHealth.memory_experiences}
-                          </div>
-                        </div>
-                        <div className="bg-black/20 rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-400 mb-1">Confianza</div>
-                          <div className={`text-lg font-mono font-bold ${systemHealth.learning_confidence === 'HIGH' ? 'text-green-400' :
-                            systemHealth.learning_confidence === 'MEDIUM' ? 'text-yellow-400' :
-                              'text-gray-400'
-                            }`}>
-                            {systemHealth.learning_confidence}
-                          </div>
-                        </div>
-                        <div className="bg-black/20 rounded-lg p-3 text-center">
-                          <div className="text-xs text-gray-400 mb-1">RAM</div>
-                          <div className="text-lg font-mono font-bold text-purple-300">
-                            {systemHealth.memory_mb?.toFixed(0) || 0}MB
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Quick Training Button */}
-                      <div className="bg-black/20 rounded-lg p-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-yellow-300">🚀 Entrenamiento Rápido</p>
-                          <p className="text-xs text-gray-400">Aprende de 100 trades históricos en segundos</p>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            setTrainingInProgress(true);
-                            try {
-                              const res = await fetch('/api/training/run', { method: 'POST' });
-                              const data = await res.json();
-                              alert(data.success ? `✅ ${data.message}` : `❌ ${data.message}`);
-                            } catch (error) {
-                              alert('❌ Error iniciando entrenamiento');
-                            }
-                            setTrainingInProgress(false);
-                          }}
-                          disabled={trainingInProgress}
-                          className="px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 text-sm font-bold"
-                        >
-                          {trainingInProgress ? '⏳ Entrenando...' : '🎯 Entrenar Ahora'}
-                        </button>
                       </div>
                     </div>
-                  )}
-
-                  {/* 5. Performance Dashboard (New) */}
-                  {memoryStats && memoryStats.total_trades > 0 && (
-                    <div className="md:col-span-3 rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 p-4 backdrop-blur mt-4">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-blue-500/20 rounded-lg">
-                          <span className="text-2xl">📊</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-blue-300">Performance Dashboard</p>
-                          <p className="text-xs text-blue-200/50">Real-time Metrics & Equity Curve</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Profit Factor: Relación entre Ganancia Bruta y Pérdida Bruta.&#10;> 1.0: Estrategia Rentable&#10;> 1.5: Estrategia Excelente&#10;< 1.0: Estrategia Perdedora"
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Profit Factor ℹ️</p>
-                          <p className={`text-xl font-mono font-bold ${memoryStats.profit_factor >= 1.5 ? 'text-green-400' : memoryStats.profit_factor >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {memoryStats.profit_factor}
-                          </p>
-                        </div>
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Net Profit: Ganancia Neta Real (Ganancia Bruta - Pérdida Bruta). Lo que realmente has ganado."
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Net Profit ℹ️</p>
-                          <p className={`text-xl font-mono font-bold ${memoryStats.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            ${memoryStats.net_profit}
-                          </p>
-                        </div>
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Gross Profit: Suma total de todas las operaciones ganadoras, sin restar las pérdidas."
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Gross Profit ℹ️</p>
-                          <p className="text-xl font-mono font-bold text-green-400/80">
-                            ${memoryStats.gross_profit}
-                          </p>
-                        </div>
-                        <div
-                          className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                          title="Gross Loss: Suma total de todas las operaciones perdedoras (en valor absoluto)."
-                        >
-                          <p className="text-xs text-gray-400 mb-1 font-medium">Gross Loss ℹ️</p>
-                          <p className="text-xl font-mono font-bold text-red-400/80">
-                            -${memoryStats.gross_loss}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Cumulative PnL Chart (Simple CSS Bar/Line representation) */}
-                      <div className="bg-black/20 rounded-lg p-4 h-48 flex flex-col relative overflow-hidden">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs text-yellow-400 font-mono font-bold">📈 Equity Curve (Ganancia Acumulada)</div>
-                          {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
-                            <div className="text-xs text-gray-400 font-mono">
-                              {memoryStats.cumulative_pnl.length} trades
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Chart Area */}
-                        <div className="flex-1 relative">
-                          {/* Zero Line */}
-                          <div className="absolute w-full h-px bg-white/20 top-1/2 left-0 z-0">
-                            <span className="absolute right-0 -top-3 text-[10px] text-gray-500">$0</span>
-                          </div>
-
-                          {/* Real-time Line Overlay */}
-                          <svg className="absolute top-0 left-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
-                              <>
-                                {/* Gradient fill under the line */}
-                                <defs>
-                                  <linearGradient id="equityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
-                                    <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
-                                  </linearGradient>
-                                </defs>
-                                {/* Filled area */}
-                                <polygon
-                                  points={`0,50 ${memoryStats.cumulative_pnl.map((point: any, i: number) => {
-                                    const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
-                                    const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
-                                    const y = 50 - (point.pnl / maxVal * 45);
-                                    return `${x},${y}`;
-                                  }).join(' ')} 100,50`}
-                                  fill="url(#equityGradient)"
-                                />
-                                {/* Main line */}
-                                <polyline
-                                  points={memoryStats.cumulative_pnl.map((point: any, i: number) => {
-                                    const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
-                                    const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
-                                    const y = 50 - (point.pnl / maxVal * 45);
-                                    return `${x},${y}`;
-                                  }).join(' ')}
-                                  fill="none"
-                                  stroke="#22c55e"
-                                  strokeWidth="1"
-                                  vectorEffect="non-scaling-stroke"
-                                />
-                              </>
-                            )}
-                          </svg>
-
-                          {/* Bar chart representation */}
-                          <div className="flex items-end gap-1 w-full h-full z-10">
-                            {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 ? (
-                              memoryStats.cumulative_pnl.map((point: any, i: number) => {
-                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
-                                const height = Math.min(Math.abs(point.pnl) / maxVal * 45, 45);
-                                const isFirst = i === 0;
-                                const isLast = i === memoryStats.cumulative_pnl.length - 1;
-                                const showTimeLabel = isFirst || isLast || (i % Math.floor(memoryStats.cumulative_pnl.length / 4) === 0);
-
-                                return (
-                                  <div key={i} className="flex-1 min-w-[2px] relative group">
-                                    <div
-                                      className={`w-full rounded-t transition-all duration-500 ${point.pnl >= 0 ? 'bg-green-500/30' : 'bg-red-500/30'}`}
-                                      style={{
-                                        height: `${Math.max(height, 3)}%`,
-                                        marginBottom: point.pnl >= 0 ? '50%' : `${50 - height}%`
-                                      }}
-                                    >
-                                      {/* Tooltip on hover */}
-                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
-                                        <div className={`font-bold ${point.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                          ${point.pnl.toFixed(2)}
-                                        </div>
-                                        <div className="text-gray-400">Trade #{point.trade}</div>
-                                      </div>
-                                    </div>
-                                    {/* Time label */}
-                                    {showTimeLabel && (
-                                      <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-gray-500 whitespace-nowrap">
-                                        #{point.trade}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
-                                No trades yet to display chart
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Pattern Performance */}
-                      {memoryStats && memoryStats.pattern_stats && memoryStats.pattern_stats.length > 0 && (
-                        <div className="mt-4 bg-black/20 rounded-lg p-4 border border-orange-500/20">
-                          <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
-                            <span>🕯️</span> Performance por Patrón
-                          </h3>
-                          <div className="space-y-2">
-                            {memoryStats.pattern_stats.map((stat: any, i: number) => (
-                              <div key={i} className="flex items-center justify-between bg-black/30 p-2 rounded text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-gray-300">{stat.pattern}</span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${stat.confidence === 'HIGH' ? 'bg-green-900 text-green-300' :
-                                    stat.confidence === 'MEDIUM' ? 'bg-yellow-900 text-yellow-300' :
-                                      'bg-gray-800 text-gray-400'
-                                    }`}>{stat.confidence}</span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <span className={stat.win_rate >= 50 ? 'text-green-400' : 'text-red-400'}>
-                                    {stat.win_rate}% WR
-                                  </span>
-                                  <span className={`font-mono w-16 text-right ${stat.avg_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    ${stat.avg_pnl}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                  ) : (
+                    <div className="text-center text-gray-500 py-2 text-sm">
+                      Cargando modelo...
                     </div>
                   )}
                 </div>
+
+                {memoryStats && (
+                  <div className="px-3 py-1 bg-purple-500/20 rounded-full border border-purple-500/30">
+                    <span className="text-xs text-purple-300 font-mono">
+                      {memoryStats.total_trades || 0} Experiences
+                    </span>
+                  </div>
+                )}
+
+
+                {/* Risk Manager Panel */}
+                <div className="mb-4 bg-black/20 rounded-lg p-4 border border-red-500/20">
+                  <h3 className="text-sm font-bold text-red-300 mb-3 flex items-center gap-2">
+                    <span>🛡️</span> Risk Manager Shield
+                    {riskStats && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${riskStats.drawdown_state === 'NORMAL' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
+                        riskStats.drawdown_state === 'STOP' ? 'bg-red-900/50 text-red-300 border-red-500/30' :
+                          'bg-yellow-900/50 text-yellow-300 border-yellow-500/30'
+                        }`}>
+                        {riskStats.drawdown_state}
+                      </span>
+                    )}
+                  </h3>
+
+                  {riskStats ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Trailing Stops</div>
+                        <div className="text-lg font-mono font-bold text-blue-300">
+                          {riskStats.trailing_stops_active}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Pyramids</div>
+                        <div className="text-lg font-mono font-bold text-purple-300">
+                          {riskStats.pyramid_positions}
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Drawdown</div>
+                        <div className={`text-lg font-mono font-bold ${riskStats.daily_drawdown > 5 ? 'text-red-400' : 'text-green-400'
+                          }`}>
+                          {riskStats.daily_drawdown}%
+                        </div>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Peak Balance</div>
+                        <div className="text-lg font-mono font-bold text-gray-300">
+                          ${riskStats.peak_balance}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500 py-2 text-sm">
+                      Cargando stats...
+                    </div>
+                  )}
+                </div>
+
+                {memoryStats && memoryStats.total_trades > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {/* Win Rate with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Win Rate: Porcentaje de trades ganadores. ≥50% = más victorias que derrotas"
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Win Rate ℹ️</p>
+                      <p className={`text-2xl font-mono font-bold ${memoryStats.win_rate >= 50 ? 'text-green-400' : 'text-yellow-400'
+                        }`}>
+                        {memoryStats.win_rate}%
+                      </p>
+                      <p className="text-xs text-foreground/40 mt-1">
+                        {memoryStats.total_wins}W / {memoryStats.total_losses}L
+                      </p>
+                    </div>
+
+                    {/* Average PnL with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Avg PnL: Ganancia o pérdida promedio por cada operación realizada."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Avg PnL/Trade ℹ️</p>
+                      <p className={`text-2xl font-mono font-bold ${memoryStats.average_pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                        ${memoryStats.average_pnl}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Per trade</p>
+                    </div>
+
+                    {/* Best Context with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Best Setup: La condición de mercado (Tendencia/Volatilidad) donde el bot gana más frecuentemente."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Best Setup ℹ️</p>
+                      <p className="text-lg font-mono font-bold text-green-400">
+                        {memoryStats.best_context?.context || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {memoryStats.best_context ? `${memoryStats.best_context.win_rate.toFixed(0)}% WR` : ''}
+                      </p>
+                    </div>
+
+                    {/* Worst Context with tooltip */}
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Avoid: La condición de mercado donde el bot suele perder. El bot intentará evitar operar aquí."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Avoid ℹ️</p>
+                      <p className="text-lg font-mono font-bold text-red-400">
+                        {memoryStats.worst_context?.context || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {memoryStats.worst_context ? `${memoryStats.worst_context.win_rate.toFixed(0)}% WR` : ''}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-foreground/30 text-sm">
+                    Waiting for first trade experience...
+                  </div>
+                )}
               </div>
 
-              {/* Trade History (1/4 width) - NOW WITH INDIVIDUAL TRADES */}
-              <div className="lg:col-span-1 space-y-4">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-panel backdrop-blur h-full flex flex-col">
-                  <h3 className="text-lg font-semibold mb-4">📊 Trades Activos</h3>
-                  <div className="flex-grow overflow-y-auto custom-scrollbar h-[500px]">
-                    <div className="space-y-2">
-                      {activeTrades.length > 0 ? (
-                        activeTrades.map((trade) => (
-                          <div key={trade.id} className="bg-black/30 p-3 rounded-lg border border-white/5 hover:border-white/10 transition">
-                            {/* Trade Info Row */}
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className={trade.side === 'LONG' ? 'text-green-400 text-xl' : 'text-red-400 text-xl'}>
-                                  {trade.side === 'LONG' ? '↗' : '↘'}
-                                </span>
-                                <div>
-                                  <div className="text-sm font-bold">{trade.side}</div>
-                                  <div className="text-xs text-gray-400 font-mono">{trade.size.toFixed(4)} BTC</div>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-xs text-gray-400">@ ${trade.entry_price.toLocaleString()}</div>
-                                <div className="text-xs text-gray-500">{new Date(trade.opened_at).toLocaleTimeString()}</div>
-                              </div>
-                            </div>
+              {/* Market Sentiment Dashboard */}
+              {sentiment && (
+                <div className="md:col-span-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4 backdrop-blur mb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-purple-500/20 rounded-lg">
+                        <span className="text-2xl">📰</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-purple-300">Market Sentiment</p>
+                        <p className="text-xs text-purple-200/50">Análisis en Tiempo Real</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full border text-sm font-bold ${sentiment.overall === 'bullish'
+                      ? 'bg-green-900/50 text-green-300 border-green-500/30'
+                      : sentiment.overall === 'bearish'
+                        ? 'bg-red-900/50 text-red-300 border-red-500/30'
+                        : 'bg-gray-900/50 text-gray-300 border-gray-500/30'
+                      }`}>
+                      {sentiment.overall === 'bullish' && '🐂 BULLISH'}
+                      {sentiment.overall === 'bearish' && '🐻 BEARISH'}
+                      {sentiment.overall === 'neutral' && '😐 NEUTRAL'}
+                    </div>
+                  </div>
 
-                            {/* PnL Display */}
-                            <div className={`text-center py-2 rounded mb-2 font-mono font-bold ${trade.unrealized_pnl_usd >= 0
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-red-500/20 text-red-400'
-                              }`}>
-                              {trade.unrealized_pnl_usd >= 0 ? '+' : ''}${trade.unrealized_pnl_usd.toFixed(2)}
-                              <span className="text-xs ml-2">
-                                ({trade.unrealized_pnl_pct >= 0 ? '+' : ''}{trade.unrealized_pnl_pct.toFixed(2)}%)
+                  {/* Sentiment Score Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400">Sentiment Score</span>
+                      <span className="text-xs font-mono text-purple-300">{sentiment.score.toFixed(2)}</span>
+                    </div>
+                    <div className="h-2 bg-black/30 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${sentiment.score > 0 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-gradient-to-r from-red-500 to-red-400'
+                          }`}
+                        style={{
+                          width: `${Math.abs(sentiment.score) * 50}%`,
+                          marginLeft: sentiment.score < 0 ? `${50 + (sentiment.score * 50)}%` : '50%'
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+                      <span>-1.0 (Bearish)</span>
+                      <span>0.0</span>
+                      <span>+1.0 (Bullish)</span>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-black/20 rounded-lg p-2 text-center">
+                      <div className="text-[10px] text-gray-400">Confidence</div>
+                      <div className={`text-sm font-mono font-bold ${sentiment.confidence === 'high' ? 'text-green-400' :
+                        sentiment.confidence === 'medium' ? 'text-yellow-400' :
+                          'text-gray-400'
+                        }`}>
+                        {sentiment.confidence.toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-2 text-center">
+                      <div className="text-[10px] text-gray-400">Trend</div>
+                      <div className="text-sm font-mono font-bold text-purple-300">
+                        {sentiment.trend === 'improving' && '📈'}
+                        {sentiment.trend === 'worsening' && '📉'}
+                        {sentiment.trend === 'stable' && '➡️'}
+                        {' '}{sentiment.trend.toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-2 text-center">
+                      <div className="text-[10px] text-gray-400">News</div>
+                      <div className="text-sm font-mono font-bold text-blue-300">
+                        {sentiment.news_count}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Events */}
+                  {sentiment.recent_events && sentiment.recent_events.length > 0 && (
+                    <div className="mt-4">
+                      <div className="text-xs text-gray-400 mb-2 font-bold">📡 Latest News:</div>
+                      <div className="space-y-2">
+                        {sentiment.recent_events.slice(0, 3).map((news: any, i: number) => (
+                          <div key={i} className="bg-black/20 rounded p-2 text-xs hover:bg-black/30 transition-colors">
+                            <div className="flex items-start gap-2">
+                              <span className="text-lg flex-shrink-0">
+                                {news.sentiment?.sentiment === 'positive' && '🟢'}
+                                {news.sentiment?.sentiment === 'negative' && '🔴'}
+                                {news.sentiment?.sentiment === 'neutral' && '🟡'}
                               </span>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex gap-2">
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`🛑 ¿Cerrar trade #${trade.id}?`)) return;
-                                  try {
-                                    const res = await fetch(`/api/trades/close/${trade.id}`, { method: 'POST' });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      // Recargar lista inmediatamente
-                                      const tradesRes = await fetch("/api/trades/active");
-                                      if (tradesRes.ok) {
-                                        const tradesData = await tradesRes.json();
-                                        setActiveTrades(tradesData.trades || []);
-                                      }
-                                      alert(`✅ Trade #${trade.id} cerrado\nPnL: $${data.trade.pnl.toFixed(2)}`);
-                                    }
-                                  } catch (e) {
-                                    alert("❌ Error");
-                                  }
-                                }}
-                                className="flex-1 bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs font-bold transition"
-                                title="Cerrar este trade"
-                              >
-                                STOP
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const res = await fetch(`/api/trades/reverse/${trade.id}`, { method: 'POST' });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      // Recargar lista inmediatamente
-                                      const tradesRes = await fetch("/api/trades/active");
-                                      if (tradesRes.ok) {
-                                        const tradesData = await tradesRes.json();
-                                        setActiveTrades(tradesData.trades || []);
-                                      }
-                                      alert(`🔄 Trade #${trade.id} → ${data.trade.side}`);
-                                    }
-                                  } catch (e) {
-                                    alert("❌ Error");
-                                  }
-                                }}
-                                className="flex-1 bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold transition"
-                                title="Invertir dirección (LONG↔SHORT)"
-                              >
-                                ⟲
-                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-gray-300 line-clamp-2">{news.title}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-gray-500">{news.source}</span>
+                                  <span className="text-[10px] text-purple-400">
+                                    Score: {news.sentiment?.score?.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-sm text-foreground/40 mt-8">
-                          No hay trades activos...
-                          <br />
-                          <span className="text-xs">Haz clic en BUY para abrir uno</span>
-                        </p>
-                      )}
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* System Health Dashboard */}
+              {systemHealth && (
+                <div className="md:col-span-3 rounded-xl border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4 backdrop-blur mb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-500/20 rounded-lg">
+                        <span className="text-2xl">⚡</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-green-300">System Health</p>
+                        <p className="text-xs text-green-200/50">Status & Performance Monitoring</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full border ${systemHealth.status === 'online'
+                      ? 'bg-green-900/50 text-green-300 border-green-500/30'
+                      : 'bg-red-900/50 text-red-300 border-red-500/30'
+                      }`}>
+                      <span className="text-xs font-mono">
+                        {systemHealth.status === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
+                      </span>
                     </div>
                   </div>
-                </div>
-              </div>
-            </section>
 
-            {/* Backtest Section (Collapsed/Secondary) */}
-            <section className="mt-8 border-t border-white/10 pt-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold opacity-50">Strategy Backtest</h2>
-                <button
-                  onClick={runBacktest}
-                  disabled={loadingBacktest}
-                  className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 text-sm"
-                >
-                  {loadingBacktest ? "Running Simulation..." : "Run Backtest"}
-                </button>
-              </div>
-              {backtestResult && (
-                <div className="grid grid-cols-3 gap-4 opacity-70">
-                  <div className="bg-white/5 p-3 rounded border border-white/10">
-                    <p className="text-xs text-foreground/50">Final Capital</p>
-                    <p className="font-mono">${backtestResult.final_capital.toFixed(2)}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">Uptime</div>
+                      <div className="text-lg font-mono font-bold text-green-300">
+                        {Math.floor(systemHealth.uptime / 60)}m
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">Experiencias</div>
+                      <div className="text-lg font-mono font-bold text-blue-300">
+                        {systemHealth.memory_experiences}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">Confianza</div>
+                      <div className={`text-lg font-mono font-bold ${systemHealth.learning_confidence === 'HIGH' ? 'text-green-400' :
+                        systemHealth.learning_confidence === 'MEDIUM' ? 'text-yellow-400' :
+                          'text-gray-400'
+                        }`}>
+                        {systemHealth.learning_confidence}
+                      </div>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-400 mb-1">RAM</div>
+                      <div className="text-lg font-mono font-bold text-purple-300">
+                        {systemHealth.memory_mb?.toFixed(0) || 0}MB
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-white/5 p-3 rounded border border-white/10">
-                    <p className="text-xs text-foreground/50">Max Drawdown</p>
-                    <p className="font-mono text-red-400">{(backtestResult.max_drawdown * 100).toFixed(2)}%</p>
-                  </div>
-                  <div className="bg-white/5 p-3 rounded border border-white/10">
-                    <p className="text-xs text-foreground/50">Total Trades</p>
-                    <p className="font-mono">{backtestResult.trades}</p>
+
+                  {/* Quick Training Button */}
+                  <div className="bg-black/20 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-yellow-300">🚀 Entrenamiento Rápido</p>
+                      <p className="text-xs text-gray-400">Aprende de 100 trades históricos en segundos</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setTrainingInProgress(true);
+                        try {
+                          const res = await fetch('/api/training/run', { method: 'POST' });
+                          const data = await res.json();
+                          alert(data.success ? `✅ ${data.message}` : `❌ ${data.message}`);
+                        } catch (error) {
+                          alert('❌ Error iniciando entrenamiento');
+                        }
+                        setTrainingInProgress(false);
+                      }}
+                      disabled={trainingInProgress}
+                      className="px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 text-sm font-bold"
+                    >
+                      {trainingInProgress ? '⏳ Entrenando...' : '🎯 Entrenar Ahora'}
+                    </button>
                   </div>
                 </div>
               )}
-            </section>
-          </main>
-        </div >
-        );
+
+              {/* 5. Performance Dashboard (New) */}
+              {memoryStats && memoryStats.total_trades > 0 && (
+                <div className="md:col-span-3 rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 p-4 backdrop-blur mt-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                      <span className="text-2xl">📊</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-blue-300">Performance Dashboard</p>
+                      <p className="text-xs text-blue-200/50">Real-time Metrics & Equity Curve</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Profit Factor: Relación entre Ganancia Bruta y Pérdida Bruta.&#10;> 1.0: Estrategia Rentable&#10;> 1.5: Estrategia Excelente&#10;< 1.0: Estrategia Perdedora"
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Profit Factor ℹ️</p>
+                      <p className={`text-xl font-mono font-bold ${memoryStats.profit_factor >= 1.5 ? 'text-green-400' : memoryStats.profit_factor >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        {memoryStats.profit_factor}
+                      </p>
+                    </div>
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Net Profit: Ganancia Neta Real (Ganancia Bruta - Pérdida Bruta). Lo que realmente has ganado."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Net Profit ℹ️</p>
+                      <p className={`text-xl font-mono font-bold ${memoryStats.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${memoryStats.net_profit}
+                      </p>
+                    </div>
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Gross Profit: Suma total de todas las operaciones ganadoras, sin restar las pérdidas."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Gross Profit ℹ️</p>
+                      <p className="text-xl font-mono font-bold text-green-400/80">
+                        ${memoryStats.gross_profit}
+                      </p>
+                    </div>
+                    <div
+                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                      title="Gross Loss: Suma total de todas las operaciones perdedoras (en valor absoluto)."
+                    >
+                      <p className="text-xs text-gray-400 mb-1 font-medium">Gross Loss ℹ️</p>
+                      <p className="text-xl font-mono font-bold text-red-400/80">
+                        -${memoryStats.gross_loss}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Cumulative PnL Chart (Simple CSS Bar/Line representation) */}
+                  <div className="bg-black/20 rounded-lg p-4 h-48 flex flex-col relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs text-yellow-400 font-mono font-bold">📈 Equity Curve (Ganancia Acumulada)</div>
+                      {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
+                        <div className="text-xs text-gray-400 font-mono">
+                          {memoryStats.cumulative_pnl.length} trades
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Chart Area */}
+                    <div className="flex-1 relative">
+                      {/* Zero Line */}
+                      <div className="absolute w-full h-px bg-white/20 top-1/2 left-0 z-0">
+                        <span className="absolute right-0 -top-3 text-[10px] text-gray-500">$0</span>
+                      </div>
+
+                      {/* Real-time Line Overlay */}
+                      <svg className="absolute top-0 left-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
+                          <>
+                            {/* Gradient fill under the line */}
+                            <defs>
+                              <linearGradient id="equityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
+                                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            {/* Filled area */}
+                            <polygon
+                              points={`0,50 ${memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                                const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
+                                const y = 50 - (point.pnl / maxVal * 45);
+                                return `${x},${y}`;
+                              }).join(' ')} 100,50`}
+                              fill="url(#equityGradient)"
+                            />
+                            {/* Main line */}
+                            <polyline
+                              points={memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                                const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
+                                const y = 50 - (point.pnl / maxVal * 45);
+                                return `${x},${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#22c55e"
+                              strokeWidth="1"
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          </>
+                        )}
+                      </svg>
+
+                      {/* Bar chart representation */}
+                      <div className="flex items-end gap-1 w-full h-full z-10">
+                        {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 ? (
+                          memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                            const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                            const height = Math.min(Math.abs(point.pnl) / maxVal * 45, 45);
+                            const isFirst = i === 0;
+                            const isLast = i === memoryStats.cumulative_pnl.length - 1;
+                            const showTimeLabel = isFirst || isLast || (i % Math.floor(memoryStats.cumulative_pnl.length / 4) === 0);
+
+                            return (
+                              <div key={i} className="flex-1 min-w-[2px] relative group">
+                                <div
+                                  className={`w-full rounded-t transition-all duration-500 ${point.pnl >= 0 ? 'bg-green-500/30' : 'bg-red-500/30'}`}
+                                  style={{
+                                    height: `${Math.max(height, 3)}%`,
+                                    marginBottom: point.pnl >= 0 ? '50%' : `${50 - height}%`
+                                  }}
+                                >
+                                  {/* Tooltip on hover */}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+                                    <div className={`font-bold ${point.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                      ${point.pnl.toFixed(2)}
+                                    </div>
+                                    <div className="text-gray-400">Trade #{point.trade}</div>
+                                  </div>
+                                </div>
+                                {/* Time label */}
+                                {showTimeLabel && (
+                                  <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-gray-500 whitespace-nowrap">
+                                    #{point.trade}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
+                            No trades yet to display chart
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pattern Performance */}
+                  {memoryStats && memoryStats.pattern_stats && memoryStats.pattern_stats.length > 0 && (
+                    <div className="mt-4 bg-black/20 rounded-lg p-4 border border-orange-500/20">
+                      <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
+                        <span>🕯️</span> Performance por Patrón
+                      </h3>
+                      <div className="space-y-2">
+                        {memoryStats.pattern_stats.map((stat: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between bg-black/30 p-2 rounded text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-gray-300">{stat.pattern}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${stat.confidence === 'HIGH' ? 'bg-green-900 text-green-300' :
+                                stat.confidence === 'MEDIUM' ? 'bg-yellow-900 text-yellow-300' :
+                                  'bg-gray-800 text-gray-400'
+                                }`}>{stat.confidence}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className={stat.win_rate >= 50 ? 'text-green-400' : 'text-red-400'}>
+                                {stat.win_rate}% WR
+                              </span>
+                              <span className={`font-mono w-16 text-right ${stat.avg_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                ${stat.avg_pnl}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Trade History (1/4 width) - NOW WITH INDIVIDUAL TRADES */}
+          <div className="lg:col-span-1 space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-panel backdrop-blur h-full flex flex-col">
+              <h3 className="text-lg font-semibold mb-4">📊 Trades Activos</h3>
+              <div className="flex-grow overflow-y-auto custom-scrollbar h-[500px]">
+                <div className="space-y-2">
+                  {activeTrades.length > 0 ? (
+                    activeTrades.map((trade) => (
+                      <div key={trade.id} className="bg-black/30 p-3 rounded-lg border border-white/5 hover:border-white/10 transition">
+                        {/* Trade Info Row */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={trade.side === 'LONG' ? 'text-green-400 text-xl' : 'text-red-400 text-xl'}>
+                              {trade.side === 'LONG' ? '↗' : '↘'}
+                            </span>
+                            <div>
+                              <div className="text-sm font-bold">{trade.side}</div>
+                              <div className="text-xs text-gray-400 font-mono">{trade.size.toFixed(4)} BTC</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-400">@ ${trade.entry_price.toLocaleString()}</div>
+                            <div className="text-xs text-gray-500">{new Date(trade.opened_at).toLocaleTimeString()}</div>
+                          </div>
+                        </div>
+
+                        {/* PnL Display */}
+                        <div className={`text-center py-2 rounded mb-2 font-mono font-bold ${trade.unrealized_pnl_usd >= 0
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-red-500/20 text-red-400'
+                          }`}>
+                          {trade.unrealized_pnl_usd >= 0 ? '+' : ''}${trade.unrealized_pnl_usd.toFixed(2)}
+                          <span className="text-xs ml-2">
+                            ({trade.unrealized_pnl_pct >= 0 ? '+' : ''}{trade.unrealized_pnl_pct.toFixed(2)}%)
+                          </span>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`🛑 ¿Cerrar trade #${trade.id}?`)) return;
+                              try {
+                                const res = await fetch(`/api/trades/close/${trade.id}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  // Recargar lista inmediatamente
+                                  const tradesRes = await fetch("/api/trades/active");
+                                  if (tradesRes.ok) {
+                                    const tradesData = await tradesRes.json();
+                                    setActiveTrades(tradesData.trades || []);
+                                  }
+                                  alert(`✅ Trade #${trade.id} cerrado\nPnL: $${data.trade.pnl.toFixed(2)}`);
+                                }
+                              } catch (e) {
+                                alert("❌ Error");
+                              }
+                            }}
+                            className="flex-1 bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs font-bold transition"
+                            title="Cerrar este trade"
+                          >
+                            STOP
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/trades/reverse/${trade.id}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  // Recargar lista inmediatamente
+                                  const tradesRes = await fetch("/api/trades/active");
+                                  if (tradesRes.ok) {
+                                    const tradesData = await tradesRes.json();
+                                    setActiveTrades(tradesData.trades || []);
+                                  }
+                                  alert(`🔄 Trade #${trade.id} → ${data.trade.side}`);
+                                }
+                              } catch (e) {
+                                alert("❌ Error");
+                              }
+                            }}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold transition"
+                            title="Invertir dirección (LONG↔SHORT)"
+                          >
+                            ⟲
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-sm text-foreground/40 mt-8">
+                      No hay trades activos...
+                      <br />
+                      <span className="text-xs">Haz clic en BUY para abrir uno</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Backtest Section (Collapsed/Secondary) */}
+        <section className="mt-8 border-t border-white/10 pt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold opacity-50">Strategy Backtest</h2>
+            <button
+              onClick={runBacktest}
+              disabled={loadingBacktest}
+              className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 text-sm"
+            >
+              {loadingBacktest ? "Running Simulation..." : "Run Backtest"}
+            </button>
+          </div>
+          {backtestResult && (
+            <div className="grid grid-cols-3 gap-4 opacity-70">
+              <div className="bg-white/5 p-3 rounded border border-white/10">
+                <p className="text-xs text-foreground/50">Final Capital</p>
+                <p className="font-mono">${backtestResult.final_capital.toFixed(2)}</p>
+              </div>
+              <div className="bg-white/5 p-3 rounded border border-white/10">
+                <p className="text-xs text-foreground/50">Max Drawdown</p>
+                <p className="font-mono text-red-400">{(backtestResult.max_drawdown * 100).toFixed(2)}%</p>
+              </div>
+              <div className="bg-white/5 p-3 rounded border border-white/10">
+                <p className="text-xs text-foreground/50">Total Trades</p>
+                <p className="font-mono">{backtestResult.trades}</p>
+              </div>
+            </div>
+          )}
+        </section>
+      </main>
+    </div >
+  );
 }
