@@ -33,7 +33,7 @@ class FastTrainer:
             "end_time": None
         }
     
-    async def run_quick_training(self, num_trades: int = 100, symbol: str = "BTC_USD"):
+    def run_quick_training(self, num_trades: int = 100, symbol: str = "BTC_USD"):
         """
         Ejecuta entrenamiento rápido simulando trades históricos.
         
@@ -52,7 +52,9 @@ class FastTrainer:
         # 1. Descargar datos históricos
         print("📊 Descargando datos históricos...")
         days_back = min(180, num_trades // 2)  # ~2 trades por día
-        candles = await self._fetch_historical_data(symbol, days=days_back)
+        
+        # Ejecutar llamada async de forma síncrona
+        candles = asyncio.run(self._fetch_historical_data(symbol, days=days_back))
         print(f"✅ Descargados {len(candles)} candles ({days_back} días)\n")
         
         # 2. Inicializar estrategia
@@ -67,7 +69,7 @@ class FastTrainer:
         
         # 3. Ejecutar backtest
         print("⚡ Ejecutando backtest en modo rápido...\n")
-        await self._execute_backtest(strategy, candles, num_trades)
+        asyncio.run(self._execute_backtest(strategy, candles, num_trades))
         
         # 4. Reportar resultados
         self.stats["end_time"] = time.time()
