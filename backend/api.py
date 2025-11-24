@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import time
+import asyncio
 
 app = FastAPI(title="Vibe Factory API")
 
 # Server start time for uptime tracking
 _server_start_time = time.time()
+
+# Auto-trading background task
+_auto_trading_task = None
 
 origins = [
     "http://localhost:3000",
@@ -710,6 +714,47 @@ def toggle_trading():
 @app.get("/api/trading/status")
 def get_trading_status():
     return {"enabled": _trading_enabled}
+
+@app.get("/api/position")
+async def get_position():
+    """Devuelve la posición actual con PnL no realizado."""
+    from broker_api_handler import get_current_position
+    from data_collector import get_current_price
+    
+    current_price = get_current_price("BTC", "USD")
+    position = await get_current_position(current_price)
+    
+    return position
+
+
+# === AUTO-TRADING BACKGROUND TASK ===
+@app.on_event("startup")
+async def startup_event():
+    """Inicia el auto-trading background task."""
+    global _auto_trading_task
+    from auto_trader import auto_trading_loop
+    
+    # Función que devuelve si el trading está habilitado
+    def is_trading_enabled():
+        return _trading_enabled
+    
+    # Iniciar el loop en background
+    _auto_trading_task = asyncio.create_task(
+        auto_trading_loop(_strategy_instance, is_trading_enabled)
+    )
+    print("[API] 🚀 Auto-trading background task started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Detiene el auto-trading background task."""
+    global _auto_trading_task
+    if _auto_trading_task:
+        _auto_trading_task.cancel()
+        try:
+            await _auto_trading_task
+        except asyncio.CancelledError:
+            pass
+    print("[API] 🛑 Auto-trading background task stopped")
 
 
 # === STATIC FILE SERVING (Frontend) ===

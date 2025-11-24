@@ -27,6 +27,13 @@ _simulated_balance = {
 
 _trade_counter = 1000
 
+# Tracking de posición actual
+_current_position = {
+    "size": 0.0,           # Cantidad de BTC
+    "entry_price": 0.0,    # Precio de entrada
+    "is_open": False       # Si hay posición abierta
+}
+
 # Cache para la instancia del exchange
 _exchange_instance = None
 
@@ -98,6 +105,12 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 _simulated_balance["BTC"] += size
                 _trade_counter += 1
                 
+                # Actualizar posición
+                global _current_position
+                _current_position["size"] = _simulated_balance["BTC"]
+                _current_position["entry_price"] = current_price
+                _current_position["is_open"] = True
+                
                 print(f"[SIMULATED] ✅ COMPRA ejecutada: {size} BTC @ ${current_price:.2f}")
                 return {
                     "status": "FILLED",
@@ -114,6 +127,15 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 proceeds = size * current_price
                 _simulated_balance["USDT"] += proceeds
                 _trade_counter += 1
+                
+                # Actualizar posición
+                global _current_position
+                if _simulated_balance["BTC"] <= 0.00001:  # Posición cerrada
+                    _current_position["size"] = 0.0
+                    _current_position["entry_price"] = 0.0
+                    _current_position["is_open"] = False
+                else:  # Parcial
+                    _current_position["size"] = _simulated_balance["BTC"]
                 
                 print(f"[SIMULATED] ✅ VENTA ejecutada: {size} BTC @ ${current_price:.2f}")
                 return {
@@ -247,3 +269,40 @@ async def close_connection():
     if _exchange_instance:
         await _exchange_instance.close()
         _exchange_instance = None
+
+async def get_current_position(current_price: float) -> dict:
+    """
+    Obtiene la posición actual y calcula el PnL no realizado.
+    
+    Args:
+        current_price: Precio actual del activo
+        
+    Returns:
+        dict con: is_open, size, entry_price, current_price, unrealized_pnl_usd, unrealized_pnl_pct
+    """
+    global _current_position
+    
+    if not _current_position["is_open"] or _current_position["size"] <= 0:
+        return {
+            "is_open": False,
+            "size": 0.0,
+            "entry_price": 0.0,
+            "current_price": current_price,
+           "unrealized_pnl_usd": 0.0,
+            "unrealized_pnl_pct": 0.0
+        }
+    
+    # Calcular PnL no realizado
+    entry_value = _current_position["size"] * _current_position["entry_price"]
+    current_value = _current_position["size"] * current_price
+    unrealized_pnl_usd = current_value - entry_value
+    unrealized_pnl_pct = (unrealized_pnl_usd / entry_value) * 100 if entry_value > 0 else 0.0
+    
+    return {
+        "is_open": True,
+        "size": _current_position["size"],
+        "entry_price": _current_position["entry_price"],
+        "current_price": current_price,
+        "unrealized_pnl_usd": unrealized_pnl_usd,
+        "unrealized_pnl_pct": unrealized_pnl_pct
+    }

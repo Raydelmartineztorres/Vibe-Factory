@@ -64,6 +64,7 @@ export default function Home() {
   const [trainingInProgress, setTrainingInProgress] = useState(false);
   const [sentiment, setSentiment] = useState<any>(null);
   const [aiAdvice, setAiAdvice] = useState<any>(null);
+  const [position, setPosition] = useState<any>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
@@ -226,6 +227,24 @@ export default function Home() {
     fetchTrades();
     fetchTrades();
     const interval = setInterval(fetchTrades, 2000); // Update every 2 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchPosition = async () => {
+      try {
+        const res = await fetch("/api/position");
+        if (res.ok) {
+          const data = await res.json();
+          setPosition(data);
+        }
+      } catch (error) {
+        // Silently fail
+      }
+    };
+
+    fetchPosition();
+    const interval = setInterval(fetchPosition, 3000); // Update every 3 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -754,6 +773,63 @@ export default function Home() {
               </p>
             </div>
           </div>
+
+          {/* Position Status Card */}
+          {position && (
+            <div className={`mt-6 rounded-2xl border p-6 transition-all duration-300 ${position.is_open
+                ? 'bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30'
+                : 'bg-black/20 border-white/10'
+              }`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold flex items-center gap-2">
+                  {position.is_open ? (
+                    <>
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
+                      </span>
+                      🟢 POSICIÓN ABIERTA
+                    </>
+                  ) : (
+                    <>🔴 SIN POSICIÓN</>
+                  )}
+                </h3>
+                {position.is_open && (
+                  <div className={`px-3 py-1 rounded-lg font-mono text-sm font-bold ${position.unrealized_pnl_usd >= 0
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    }`}>
+                    {position.unrealized_pnl_usd >= 0 ? '+' : ''}${position.unrealized_pnl_usd.toFixed(2)}
+                    {' '}({position.unrealized_pnl_pct >= 0 ? '+' : ''}{position.unrealized_pnl_pct.toFixed(2)}%)
+                  </div>
+                )}
+              </div>
+
+              {position.is_open && (
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="rounded-xl bg-black/30 p-3">
+                    <p className="text-xs text-gray-400 mb-1">Tamaño</p>
+                    <p className="text-lg font-mono text-yellow-400">{position.size.toFixed(6)} BTC</p>
+                  </div>
+                  <div className="rounded-xl bg-black/30 p-3">
+                    <p className="text-xs text-gray-400 mb-1">Precio Entrada</p>
+                    <p className="text-lg font-mono text-blue-400">${position.entry_price.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl bg-black/30 p-3">
+                    <p className="text-xs text-gray-400 mb-1">Precio Actual</p>
+                    <p className="text-lg font-mono text-purple-400">${position.current_price.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl bg-black/30 p-3">
+                    <p className="text-xs text-gray-400 mb-1">PnL No Realizado</p>
+                    <p className={`text-lg font-mono font-bold ${position.unrealized_pnl_usd >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                      {position.unrealized_pnl_usd >= 0 ? '+' : ''}${position.unrealized_pnl_usd.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Trading Terminal Section - ALWAYS VISIBLE */}
