@@ -1081,7 +1081,22 @@ export default function Home() {
                 <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
                 <select
                   value={selectedSymbol}
-                  onChange={(e) => setSelectedSymbol(e.target.value)}
+                  onChange={async (e) => {
+                    const newSymbol = e.target.value;
+                    setSelectedSymbol(newSymbol);
+                    // Notificar al backend para cambiar el feed de datos
+                    try {
+                      await fetch("/api/set_symbol", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ symbol: newSymbol }),
+                      });
+                      // Resetear datos visuales
+                      setMlPrediction(null);
+                    } catch (err) {
+                      console.error("Failed to set symbol:", err);
+                    }
+                  }}
                   className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none cursor-pointer"
                 >
                   <option value="BTC/USDT">₿ Bitcoin (BTC)</option>

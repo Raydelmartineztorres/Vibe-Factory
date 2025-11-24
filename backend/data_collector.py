@@ -117,6 +117,7 @@ async def bootstrap_data_pipeline(
     strategy: StrategyLike,
     live_mode: str,
     handler: TickHandler | None = None,
+    symbol: str = "BTC/USDT"
 ) -> None:
     """
     Arranca el feed en tiempo real y enruta cada tick hacia la estrategia.
@@ -129,6 +130,8 @@ async def bootstrap_data_pipeline(
         "demo" (paper) o "real".
     handler:
         Callback opcional para observar cada tick (logging/metrics).
+    symbol:
+        Símbolo a trackear (ej: "BTC/USDT").
     """
 
     async def _urllib_feed() -> None:
@@ -139,8 +142,11 @@ async def bootstrap_data_pipeline(
         
         import ssl
         
+        # Map symbol to Coinbase format (BTC/USDT -> BTC-USD)
+        coinbase_pair = symbol.replace("/", "-").replace("USDT", "USD")
+        
         # Usamos Coinbase porque Binance bloquea IPs de servidores en EEUU (Error 451)
-        url = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+        url = f"https://api.coinbase.com/v2/prices/{coinbase_pair}/spot"
         
         # Ignorar errores SSL (común en Mac/Servers)
         ctx = ssl.create_default_context()
@@ -161,7 +167,7 @@ async def bootstrap_data_pipeline(
                 price = float(data['data']['amount'])
                 
                 tick = {
-                    "symbol": "BTC/USDT",
+                    "symbol": symbol,
                     "price": price,
                     "mode": live_mode,
                     "timestamp": time.time()

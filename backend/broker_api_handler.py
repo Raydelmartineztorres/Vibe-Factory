@@ -91,22 +91,29 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
     symbol = payload["symbol"].replace("_", "/") # Convertir BTC_USDT a BTC/USDT
     side = payload["side"]
     size = payload["size"]
+    
+    # Extract base currency from symbol (e.g., BTC from BTC/USDT)
+    base_currency = symbol.split("/")[0]
 
     # --- MODO DEMO ---
     if mode == "demo":
         # Precio simulado (usaremos uno realista)
         current_price = 90000 + random.uniform(-500, 500)
         
+        # Initialize balance for this currency if it doesn't exist
+        if base_currency not in _simulated_balance:
+            _simulated_balance[base_currency] = 0.0
+        
         # Ejecutar la operación en balance simulado
         if side == "BUY":
             cost = size * current_price
             if _simulated_balance["USDT"] >= cost:
                 _simulated_balance["USDT"] -= cost
-                _simulated_balance["BTC"] += size
+                _simulated_balance[base_currency] += size
                 _trade_counter += 1
                 
                 # Actualizar posición
-                _current_position["size"] = _simulated_balance["BTC"]
+                _current_position["size"] = _simulated_balance[base_currency]
                 _current_position["entry_price"] = current_price
                 _current_position["is_open"] = True
                 
@@ -115,40 +122,40 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 tracker = get_tracker()
                 tracker.open_trade(size, current_price, "LONG")
                 
-                print(f"[SIMULATED] ✅ COMPRA ejecutada: {size} BTC @ ${current_price:.2f}")
+                print(f"[SIMULATED] ✅ COMPRA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
                 return {
                     "status": "FILLED",
                     "id": f"SIM-{_trade_counter}",
                     "price": current_price,
-                    "details": {"side": "BUY", "amount": size, "cost": cost, "price": current_price}
+                    "details": {"side": "BUY", "amount": size, "cost": cost, "price": current_price, "symbol": symbol}
                 }
             else:
                 return {"status": "FAILED", "error": "Insufficient USDT balance"}
                 
         elif side == "SELL":
-            if _simulated_balance["BTC"] >= size:
-                _simulated_balance["BTC"] -= size
+            if _simulated_balance.get(base_currency, 0) >= size:
+                _simulated_balance[base_currency] -= size
                 proceeds = size * current_price
                 _simulated_balance["USDT"] += proceeds
                 _trade_counter += 1
                 
                 # Actualizar posición
-                if _simulated_balance["BTC"] <= 0.00001:  # Posición cerrada
+                if _simulated_balance[base_currency] <= 0.00001:  # Posición cerrada
                     _current_position["size"] = 0.0
                     _current_position["entry_price"] = 0.0
                     _current_position["is_open"] = False
                 else:  # Parcial
-                    _current_position["size"] = _simulated_balance["BTC"]
+                    _current_position["size"] = _simulated_balance[base_currency]
                 
-                print(f"[SIMULATED] ✅ VENTA ejecutada: {size} BTC @ ${current_price:.2f}")
+                print(f"[SIMULATED] ✅ VENTA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
                 return {
                     "status": "FILLED",
                     "id": f"SIM-{_trade_counter}",
                     "price": current_price,
-                    "details": {"side": "SELL", "amount": size, "cost": proceeds, "price": current_price}
+                    "details": {"side": "SELL", "amount": size, "cost": proceeds, "price": current_price, "symbol": symbol}
                 }
             else:
-                return {"status": "FAILED", "error": "Insufficient BTC balance"}
+                return {"status": "FAILED", "error": f"Insufficient {base_currency} balance"}
     
     # --- MODO REAL ---
     else:

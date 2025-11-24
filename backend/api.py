@@ -153,15 +153,21 @@ import asyncio
 import time
 
 _strategy_instance = RiskStrategy()
+_strategy_instance = RiskStrategy()
 _optimizer_instance = Optimizer(_strategy_instance)
+_data_task = None
+_current_symbol = "BTC/USDT"
 
 @app.on_event("startup")
 async def startup_event():
     """Iniciar el loop de trading y aprendizaje en background."""
     # 1. Pipeline de datos y trading
-    asyncio.create_task(bootstrap_data_pipeline(
+    global _data_task
+    # 1. Pipeline de datos y trading
+    _data_task = asyncio.create_task(bootstrap_data_pipeline(
         strategy=_strategy_instance,
-        live_mode="demo" # Data pipeline always runs in demo/paper mode for now
+        live_mode="demo", # Data pipeline always runs in demo/paper mode for now
+        symbol=_current_symbol
     ))
     
     # 2. Optimizador (Aprendizaje)
@@ -171,7 +177,44 @@ async def startup_event():
 def get_current_price():
     """Retorna el precio real de la estrategia."""
     price = _strategy_instance.last_price if _strategy_instance.last_price > 0 else 90000.0
-    return {"symbol": "BTC/USDT", "price": price}
+    return {"symbol": _current_symbol, "price": price}
+
+@app.post("/api/set_symbol")
+async def set_symbol(payload: dict):
+    """Cambia el símbolo activo y reinicia el pipeline de datos."""
+    global _current_symbol, _data_task
+    
+    new_symbol = payload.get("symbol")
+    if not new_symbol:
+        return {"error": "Symbol required"}
+        
+    if new_symbol == _current_symbol:
+        return {"status": "unchanged", "symbol": _current_symbol}
+        
+    print(f"[API] Switching symbol to {new_symbol}...")
+    _current_symbol = new_symbol
+    
+    # Cancelar tarea anterior
+    if _data_task:
+        _data_task.cancel()
+        try:
+            await _data_task
+        except asyncio.CancelledError:
+            pass
+            
+    # Reiniciar pipeline con nuevo símbolo
+    _data_task = asyncio.create_task(bootstrap_data_pipeline(
+        strategy=_strategy_instance,
+        live_mode="demo",
+        symbol=_current_symbol
+    ))
+    
+    # Resetear estado de la estrategia para el nuevo símbolo
+    # (Opcional: podríamos querer mantener el historial si es multi-asset real)
+    _strategy_instance.candles = []
+    _strategy_instance.last_price = 0.0
+    
+    return {"status": "success", "symbol": _current_symbol}
 
 @app.get("/api/trades")
 def get_trades():
