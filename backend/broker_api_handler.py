@@ -86,7 +86,7 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
     """
     Envía la orden al broker configurado o la simula.
     """
-    global _simulated_balance, _trade_counter
+    global _simulated_balance, _trade_counter, _current_position
     
     symbol = payload["symbol"].replace("_", "/") # Convertir BTC_USDT a BTC/USDT
     side = payload["side"]
@@ -106,7 +106,6 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 _trade_counter += 1
                 
                 # Actualizar posición
-                global _current_position
                 _current_position["size"] = _simulated_balance["BTC"]
                 _current_position["entry_price"] = current_price
                 _current_position["is_open"] = True
@@ -129,7 +128,6 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 _trade_counter += 1
                 
                 # Actualizar posición
-                global _current_position
                 if _simulated_balance["BTC"] <= 0.00001:  # Posición cerrada
                     _current_position["size"] = 0.0
                     _current_position["entry_price"] = 0.0
