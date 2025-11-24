@@ -432,6 +432,13 @@ export default function Home() {
 
             candlestickSeriesRef.current.setData(uniqueCandles);
 
+            // Force auto-scaling to fit new data range
+            if (chartRef.current) {
+              chartRef.current.priceScale('right').applyOptions({
+                autoScale: true,
+              });
+            }
+
             // Agregar marcadores de trades
             const markers = trades.map(t => {
               // Ajustar tiempo del trade al inicio de la vela de 5s correspondiente
@@ -901,7 +908,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeTrades.map((trade) => (
+                  {activeTrades.filter(t => t.symbol === undefined || t.symbol === selectedSymbol.replace("/", "_")).map((trade) => (
                     <tr key={trade.id} className="border-b border-white/5 hover:bg-white/5 transition">
                       <td className="py-3 px-4 font-mono">#{trade.id}</td>
                       <td className="py-3 px-4">
@@ -996,7 +1003,7 @@ export default function Home() {
               {/* Live Price Overlay - BIGGER and YELLOW */}
               <div className="absolute top-4 left-4 flex items-center gap-2">
                 <div className="bg-black/80 backdrop-blur-md px-4 py-2.5 rounded-lg border border-yellow-500/30 shadow-lg">
-                  <span className="text-xs text-gray-400 mr-2 uppercase">BTC/USDT</span>
+                  <span className="text-xs text-gray-400 mr-2 uppercase">{selectedSymbol}</span>
                   <span className="font-mono font-bold text-2xl text-yellow-400">${livePrice?.toFixed(2) || '---'}</span>
                 </div>
                 {/* LIVE Indicator with glow effect */}
