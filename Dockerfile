@@ -14,9 +14,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
+# Install Python dependencies
 COPY backend/requirements.txt .
-# If requirements.txt doesn't exist, we install manually (fallback)
-RUN pip install fastapi uvicorn[standard] ccxt httpx python-dotenv typer rich
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy Backend Code
 COPY backend/ ./backend/
