@@ -75,15 +75,17 @@ def live(
 
 
 @cli.command()
-def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+def serve(host: str = "0.0.0.0", port: int = 8000) -> None:
     """
     Inicia el servidor API (FastAPI + Uvicorn).
     """
     import uvicorn
+    import os
     console.print(f"[cyan]→ Iniciando servidor API en http://{host}:{port}[/cyan]")
     
-    # Static files are now handled in api.py (at the end, after all API routes)
-    uvicorn.run("api:app", host=host, port=port, reload=True)
+    # Disable reload in production for better stability
+    reload = os.getenv("RELOAD", "false").lower() == "true"
+    uvicorn.run("api:app", host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":
