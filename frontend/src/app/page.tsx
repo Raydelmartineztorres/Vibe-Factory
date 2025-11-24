@@ -242,7 +242,7 @@ export default function Home() {
     fetchPrice();
     const interval = setInterval(fetchPrice, 1000); // Update every second
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const fetchTrades = async () => {
@@ -261,7 +261,7 @@ export default function Home() {
     fetchTrades();
     const interval = setInterval(fetchTrades, 2000); // Update every 2 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const fetchPosition = async () => {
@@ -279,7 +279,7 @@ export default function Home() {
     fetchPosition();
     const interval = setInterval(fetchPosition, 3000); // Update every 3 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const fetchActiveTrades = async () => {
@@ -297,7 +297,7 @@ export default function Home() {
     fetchActiveTrades();
     const interval = setInterval(fetchActiveTrades, 3000); // Update every 3 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const fetchMlPrediction = async () => {
@@ -363,7 +363,7 @@ export default function Home() {
       fetchSentiment();
     }, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const fetchBalance = async () => {
@@ -525,7 +525,7 @@ export default function Home() {
       clearInterval(memoryInterval);
       clearInterval(indicatorInterval);
     };
-  }, [trades]);
+  }, [trades, selectedSymbol]);
 
   // Inicializar gráfico
   useEffect(() => {
@@ -1084,6 +1084,14 @@ export default function Home() {
                   onChange={async (e) => {
                     const newSymbol = e.target.value;
                     setSelectedSymbol(newSymbol);
+
+                    // Reset trade size based on asset class (heuristic)
+                    if (newSymbol.includes("BTC") || newSymbol.includes("ETH")) {
+                      setTradeSize(0.001);
+                    } else {
+                      setTradeSize(10.0); // Default for cheaper assets
+                    }
+
                     // Notificar al backend para cambiar el feed de datos
                     try {
                       await fetch("/api/set_symbol", {
@@ -1093,6 +1101,7 @@ export default function Home() {
                       });
                       // Resetear datos visuales
                       setMlPrediction(null);
+                      if (candlestickSeriesRef.current) candlestickSeriesRef.current.setData([]);
                     } catch (err) {
                       console.error("Failed to set symbol:", err);
                     }
