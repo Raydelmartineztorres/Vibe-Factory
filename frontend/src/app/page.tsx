@@ -1753,8 +1753,8 @@ export default function Home() {
 
                         {/* PnL Display */}
                         <div className={`text-center py-2 rounded mb-2 font-mono font-bold ${trade.unrealized_pnl_usd >= 0
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-red-500/20 text-red-400'
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-red-500/20 text-red-400'
                           }`}>
                           {trade.unrealized_pnl_usd >= 0 ? '+' : ''}${trade.unrealized_pnl_usd.toFixed(2)}
                           <span className="text-xs ml-2">
@@ -1771,7 +1771,13 @@ export default function Home() {
                                 const res = await fetch(`/api/trades/close/${trade.id}`, { method: 'POST' });
                                 const data = await res.json();
                                 if (data.success) {
-                                  alert(`✅ Trade cerrado\nPnL: $${data.trade.pnl.toFixed(2)}`);
+                                  // Recargar lista inmediatamente
+                                  const tradesRes = await fetch("/api/trades/active");
+                                  if (tradesRes.ok) {
+                                    const tradesData = await tradesRes.json();
+                                    setActiveTrades(tradesData.trades || []);
+                                  }
+                                  alert(`✅ Trade #${trade.id} cerrado\nPnL: $${data.trade.pnl.toFixed(2)}`);
                                 }
                               } catch (e) {
                                 alert("❌ Error");
@@ -1788,7 +1794,13 @@ export default function Home() {
                                 const res = await fetch(`/api/trades/reverse/${trade.id}`, { method: 'POST' });
                                 const data = await res.json();
                                 if (data.success) {
-                                  alert(`🔄 Dirección cambiada a ${data.trade.side}`);
+                                  // Recargar lista inmediatamente
+                                  const tradesRes = await fetch("/api/trades/active");
+                                  if (tradesRes.ok) {
+                                    const tradesData = await tradesRes.json();
+                                    setActiveTrades(tradesData.trades || []);
+                                  }
+                                  alert(`🔄 Trade #${trade.id} → ${data.trade.side}`);
                                 }
                               } catch (e) {
                                 alert("❌ Error");
