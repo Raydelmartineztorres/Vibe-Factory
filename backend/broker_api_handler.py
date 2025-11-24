@@ -198,7 +198,7 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
     """
     Cierra inmediatamente toda la posición del activo base (vende todo a mercado).
     """
-    global _simulated_balance, _trade_counter
+    global _simulated_balance, _trade_counter, _current_position
     
     # Normalizar símbolo (ej: BTC_USDT -> BTC/USDT)
     normalized_symbol = symbol.replace("_", "/")
@@ -216,6 +216,11 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
         _simulated_balance[base_asset] = 0.0
         _simulated_balance["USDT"] += proceeds
         _trade_counter += 1
+        
+        # Resetear posición
+        _current_position["size"] = 0.0
+        _current_position["entry_price"] = 0.0
+        _current_position["is_open"] = False
         
         print(f"[SIMULATED] 🚨 CLOSE POSITION: Sold {amount} {base_asset} @ ${current_price:.2f}")
         return {
