@@ -66,6 +66,14 @@ export default function Home() {
   const [aiAdvice, setAiAdvice] = useState<any>(null);
   const [position, setPosition] = useState<any>(null);
   const [activeTrades, setActiveTrades] = useState<any[]>([]);
+
+  // Trading Configuration
+  const [tradeSize, setTradeSize] = useState(0.001);
+  const [brokerFee, setBrokerFee] = useState(0.1);
+  const [stopLossEnabled, setStopLossEnabled] = useState(false);
+  const [stopLossPercent, setStopLossPercent] = useState(2.0);
+  const [takeProfitEnabled, setTakeProfitEnabled] = useState(false);
+  const [takeProfitPercent, setTakeProfitPercent] = useState(3.0);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
@@ -92,6 +100,26 @@ export default function Home() {
   };
 
   const executeTrade = async (side: "BUY" | "SELL") => {
+    // Calculate trade details
+    const currentPrice = livePrice || 86000;
+    const totalCost = tradeSize * currentPrice;
+    const fee = totalCost * (brokerFee / 100);
+    const slPrice = stopLossEnabled ? currentPrice * (1 - stopLossPercent / 100) : null;
+    const tpPrice = takeProfitEnabled ? currentPrice * (1 + takeProfitPercent / 100) : null;
+
+    // Show confirmation
+    const confirmMsg = `📊 Resumen del Trade\n\n` +
+      `Lado: ${side}\n` +
+      `Cantidad: ${tradeSize.toFixed(4)} BTC\n` +
+      `Precio: $${currentPrice.toFixed(2)}\n` +
+      `Total: $${totalCost.toFixed(2)}\n` +
+      `Comisión (${brokerFee}%): $${fee.toFixed(2)}\n` +
+      (stopLossEnabled ? `Stop Loss: $${slPrice?.toFixed(2)} (-${stopLossPercent}%)\n` : '') +
+      (takeProfitEnabled ? `Take Profit: $${tpPrice?.toFixed(2)} (+${takeProfitPercent}%)\n` : '') +
+      `\n¿Ejecutar orden?`;
+
+    if (!confirm(confirmMsg)) return;
+
     try {
       const res = await fetch("/api/trade", {
         method: "POST",
@@ -99,16 +127,16 @@ export default function Home() {
         body: JSON.stringify({
           symbol: "BTC_USD",
           side: side,
-          size: 0.001, // Tamaño fijo para demo
-          stop_loss: null,
-          take_profit: null,
+          size: tradeSize,
+          stop_loss: slPrice,
+          take_profit: tpPrice,
         }),
       });
       const data = await res.json();
 
       // Verificar si la orden fue exitosa
       if (data.status === "FILLED" || data.status === "SIMULATED") {
-        alert(`✅ Orden ${side} ejecutada!\nID: ${data.id}\nPrecio: ~$${livePrice?.toFixed(2) || 'N/A'}`);
+        alert(`✅ Orden ${side} ejecutada!\nID: ${data.id}\nPrecio: ~$${currentPrice.toFixed(2)}`);
       } else if (data.error) {
         alert(`❌ Error: ${data.error}`);
       } else {
@@ -1044,7 +1072,83 @@ export default function Home() {
                 )}
               </div>
 
-              {/* 2. Manual Controls */}
+              {/* 2. Trading Configuration */}
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col gap-3">
+                <h4 className="text-sm font-bold text-white/80">⚙️ Configuración de Trading</h4>
+
+                {/* Trade Size */}
+                <div>
+                  <label className="text-xs text-white/60">Cantidad (BTC)</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={tradeSize}
+                    onChange={(e) => setTradeSize(parseFloat(e.target.value) || 0)}
+                    className="w-full mt-1 px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                  <div className="text-xs text-white/40 mt-1">
+                    ≈ ${((tradeSize * (livePrice || 86000))).toFixed(2)} USD
+                  </div>
+                </div>
+
+                {/* Broker Fee */}
+                <div>
+                  <label className="text-xs text-white/60">Comisión del Broker (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={brokerFee}
+                    onChange={(e) => setBrokerFee(parseFloat(e.target.value) || 0)}
+                    className="w-full mt-1 px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Stop Loss */}
+                <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
+                  <input
+                    type="checkbox"
+                    checked={stopLossEnabled}
+                    onChange={(e) => setStopLossEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <label className="text-xs text-red-400 font-bold">Stop Loss</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      disabled={!stopLossEnabled}
+                      value={stopLossPercent}
+                      onChange={(e) => setStopLossPercent(parseFloat(e.target.value) || 0)}
+                      className="w-full mt-1 px-2 py-1 bg-black/30 border border-red-500/30 rounded text-red-400 font-mono text-xs disabled:opacity-30 focus:border-red-500 focus:outline-none"
+                      placeholder="%"
+                    />
+                  </div>
+                </div>
+
+                {/* Take Profit */}
+                <div className="flex items-center gap-2 p-2 bg-black/20 rounded">
+                  <input
+                    type="checkbox"
+                    checked={takeProfitEnabled}
+                    onChange={(e) => setTakeProfitEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <label className="text-xs text-green-400 font-bold">Take Profit</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      disabled={!takeProfitEnabled}
+                      value={takeProfitPercent}
+                      onChange={(e) => setTakeProfitPercent(parseFloat(e.target.value) || 0)}
+                      className="w-full mt-1 px-2 py-1 bg-black/30 border border-green-500/30 rounded text-green-400 font-mono text-xs disabled:opacity-30 focus:border-green-500 focus:outline-none"
+                      placeholder="%"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Manual Controls */}
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur flex flex-col gap-2">
                 <div className="flex gap-2">
                   <button
