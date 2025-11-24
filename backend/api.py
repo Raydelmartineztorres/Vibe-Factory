@@ -722,9 +722,9 @@ def get_trading_status():
 async def get_position():
     """Devuelve la posición actual con PnL no realizado."""
     from broker_api_handler import get_current_position
-    from data_collector import get_current_price
+    import random
     
-    current_price = get_current_price("BTC", "USD")
+    current_price = 86000 + random.uniform(-500, 500)
     position = await get_current_position(current_price)
     
     return position
