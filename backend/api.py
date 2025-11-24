@@ -224,11 +224,11 @@ def get_trading_mode():
 
 @app.post("/api/trading/mode")
 def set_trading_mode(payload: dict):
-    """Cambia el modo de trading (demo, testnet, real)."""
+    """Cambia el modo de trading (demo, testnet, real, oanda_demo, oanda_real)."""
     global _trading_mode
     new_mode = payload.get("mode")
-    if new_mode not in ["demo", "testnet", "real"]:
-        return {"error": "Invalid mode. Use: demo, testnet, real"}
+    if new_mode not in ["demo", "testnet", "real", "oanda_demo", "oanda_real"]:
+        return {"error": "Invalid mode. Use: demo, testnet, real, oanda_demo, oanda_real"}
     
     _trading_mode = new_mode
     print(f"[API] Trading mode switched to: {_trading_mode.upper()}")

@@ -10,6 +10,8 @@ import time
 import random
 import os
 import ccxt.async_support as ccxt  # Async version of ccxt
+from oandapyV20 import API
+from oandapyV20.endpoints.orders import OrderCreate
 
 class OrderPayload(TypedDict):
     symbol: str
@@ -36,6 +38,7 @@ _current_position = {
 
 # Cache para la instancia del exchange
 _exchange_instance = None
+_oanda_client = None
 
 
 async def _get_exchange(mode: Literal["testnet", "real"] = "real"):
@@ -96,7 +99,39 @@ async def _get_exchange(mode: Literal["testnet", "real"] = "real"):
         raise e
 
 
-async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real"]) -> dict:
+def _get_oanda_client(mode: Literal["demo", "real"] = "demo"):
+    """
+    Inicializa y retorna cliente OANDA.
+    """
+    global _oanda_client
+    
+    if _oanda_client:
+        return _oanda_client
+    
+    if mode == "demo":
+        token = os.getenv("OANDA_DEMO_TOKEN")
+        account_id = os.getenv("OANDA_DEMO_ACCOUNT_ID")
+        environment = "practice"
+        print("[BROKER] Initializing OANDA DEMO mode")
+    else:
+        token = os.getenv("OANDA_REAL_TOKEN")
+        account_id = os.getenv("OANDA_REAL_ACCOUNT_ID")
+        environment = "live"
+        print("[BROKER] Initializing OANDA REAL mode")
+    
+    if not token or not account_id:
+        raise ValueError(f"Faltan credenciales OANDA para modo {mode}. Configure OANDA_{mode.upper()}_TOKEN y ACCOUNT_ID.")
+    
+    try:
+        _oanda_client = {"api": API(access_token=token, environment=environment), "account_id": account_id}
+        print(f"[BROKER] Conectado exitosamente a OANDA ({mode})")
+        return _oanda_client
+    except Exception as e:
+        print(f"[ERROR] Fallo al conectar con OANDA: {e}")
+        raise e
+
+
+async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real", "oanda_demo", "oanda_real"]) -> dict:
     """
     Envía la orden al broker configurado o la simula.
     """
@@ -199,6 +234,45 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
             
         except Exception as e:
             print(f"[{mode.upper()}] ❌ Error ejecutando orden: {e}")
+            return {"status": "FAILED", "error": str(e)}
+    
+    # --- MODO OANDA (Demo o Real) ---
+    elif mode in ["oanda_demo", "oanda_real"]:
+        try:
+            oanda_mode = "demo" if mode == "oanda_demo" else "real"
+            client = _get_oanda_client(oanda_mode)
+            api = client["api"]
+            account_id = client["account_id"]
+            
+            # OANDA solo soporta EUR/USD por ahora
+            oanda_symbol = "EUR_USD"
+            
+            # Crear orden de mercado
+            order_data = {
+                "order": {
+                    "instrument": oanda_symbol,
+                    "units": str(int(size * 10000)) if side == "BUY" else str(int(-size * 10000)),  # OANDA usa units (1 unit = $10,000)
+                    "type": "MARKET",
+                    "positionFill": "DEFAULT"
+                }
+            }
+            
+            order_request = OrderCreate(accountID=account_id, data=order_data)
+            response = api.request(order_request)
+            
+            fill_price = float(response["orderFillTransaction"]["price"])
+            order_id = response["orderFillTransaction"]["id"]
+            
+            print(f"[OANDA {oanda_mode.upper()}] ✅ Orden ejecutada: {order_id}")
+            return {
+                "status": "FILLED",
+                "id": order_id,
+                "price": fill_price,
+                "details": response
+            }
+            
+        except Exception as e:
+            print(f"[OANDA] ❌ Error ejecutando orden: {e}")
             return {"status": "FAILED", "error": str(e)}
             # Crear orden de mercado
             # Nota: Algunos exchanges requieren 'create_market_buy_order' especifico, 

@@ -2,11 +2,14 @@ fastapi
 uvicorn[standard]
 ccxt
 httpx
+joblib
 python-dotenv
 typer
 rich
 numpy==1.26.0
 pandas==2.0.3
-scikit-learn==1.3.0
-joblib
+scikit-learn==1.3.2
+ccxt==4.1.0
+websocket-client==1.6.4
+oandapyV20==0.7.2b
 psutil
