@@ -200,34 +200,6 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
         except Exception as e:
             print(f"[{mode.upper()}] ❌ Error ejecutando orden: {e}")
             return {"status": "FAILED", "error": str(e)}
-                _simulated_balance[base_currency] -= size
-                proceeds = size * current_price
-                _simulated_balance["USDT"] += proceeds
-                _trade_counter += 1
-                
-                # Actualizar posición
-                if _simulated_balance[base_currency] <= 0.00001:  # Posición cerrada
-                    _current_position["size"] = 0.0
-                    _current_position["entry_price"] = 0.0
-                    _current_position["is_open"] = False
-                else:  # Parcial
-                    _current_position["size"] = _simulated_balance[base_currency]
-                
-                print(f"[SIMULATED] ✅ VENTA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
-                return {
-                    "status": "FILLED",
-                    "id": f"SIM-{_trade_counter}",
-                    "price": current_price,
-                    "details": {"side": "SELL", "amount": size, "cost": proceeds, "price": current_price, "symbol": symbol}
-                }
-            else:
-                return {"status": "FAILED", "error": f"Insufficient {base_currency} balance"}
-    
-    # --- MODO REAL ---
-    else:
-        try:
-            exchange = await _get_exchange()
-            
             # Crear orden de mercado
             # Nota: Algunos exchanges requieren 'create_market_buy_order' especifico, 
             # pero create_order es el método unificado.

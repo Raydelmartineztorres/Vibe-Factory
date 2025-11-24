@@ -110,14 +110,22 @@ async def api_run_backtest():
 async def place_trade(payload: dict):
     """Recibe orden de compra/venta y la ejecuta según el modo actual."""
     from broker_api_handler import execute_order
-        _strategy_instance.register_trade(
-            side=payload["side"],
-            price=result["price"],
-            size=payload["size"],
-            result=result
-        )
+    try:
+        # Usar el modo global configurado
+        result = await execute_order(payload, mode=_trading_mode)
         
-    return result
+        # Actualizar estado de la estrategia si la orden fue exitosa
+        if result.get("status") in ["FILLED", "SIMULATED"]:
+            _strategy_instance.register_trade(
+                side=payload["side"],
+                price=result["price"],
+                size=payload["size"],
+                result=result
+            )
+            
+        return result
+    except Exception as e:
+        return {"status": "FAILED", "error": str(e)}
 
 @app.post("/api/trade/close")
 async def api_close_position(payload: dict):
