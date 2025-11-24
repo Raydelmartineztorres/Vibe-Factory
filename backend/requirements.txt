@@ -5,7 +5,8 @@ httpx
 python-dotenv
 typer
 rich
-scikit-learn
-numpy
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
 joblib
 psutil
