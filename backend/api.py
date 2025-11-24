@@ -736,10 +736,11 @@ def get_active_trades():
     """Devuelve todos los trades abiertos con PnL en tiempo real."""
     try:
         from trade_tracker import get_tracker
-        from data_collector import get_current_price
+        import random
         
         tracker = get_tracker()
-        current_price = get_current_price("BTC", "USD")
+        # Usar precio simulado (cambiar luego por precio real del gráfico)
+        current_price = 86000 + random.uniform(-500, 500)
         
         active_trades = tracker.get_active_trades()
         
