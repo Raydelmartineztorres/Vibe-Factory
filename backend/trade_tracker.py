@@ -37,7 +37,7 @@ class TradeTracker:
             return 1
         return max(t.get("id", 0) for t in self.trades) + 1
     
-    def open_trade(self, size: float, entry_price: float, side: str = "LONG") -> Dict:
+    def open_trade(self, size: float, entry_price: float, side: str = "LONG", symbol: str = "BTC/USDT") -> Dict:
         """
         Abre un nuevo trade.
         
@@ -45,12 +45,14 @@ class TradeTracker:
             size: Cantidad de BTC
             entry_price: Precio de entrada
             side: LONG o SHORT
+            symbol: Símbolo del activo (ej: BTC/USDT)
             
         Returns:
             Diccionario del trade creado
         """
         trade = {
             "id": self._generate_id(),
+            "symbol": symbol,
             "size": size,
             "entry_price": entry_price,
             "side": side,
@@ -59,7 +61,7 @@ class TradeTracker:
         }
         self.trades.append(trade)
         self._save()
-        print(f"[TRACKER] ✅ Trade #{trade['id']} abierto: {size} BTC @ ${entry_price:,.0f} ({side})")
+        print(f"[TRACKER] ✅ Trade #{trade['id']} abierto: {size} {symbol} @ ${entry_price:,.2f} ({side})")
         return trade
     
     def close_trade(self, trade_id: int, exit_price: float) -> Optional[Dict]:
