@@ -742,12 +742,19 @@ def get_active_trades():
     
     active_trades = tracker.get_active_trades()
     
+    # DEBUG: Si no hay trades, crear uno de prueba
+    if len(active_trades) == 0:
+        print("[DEBUG] No hay trades, creando uno de prueba...")
+        tracker.open_trade(0.001, 85000, "LONG")
+        active_trades = tracker.get_active_trades()
+    
     # Calcular PnL en vivo para cada trade
     trades_with_pnl = []
     for trade in active_trades:
         trade_with_pnl = tracker.calculate_live_pnl(trade, current_price)
         trades_with_pnl.append(trade_with_pnl)
     
+    print(f"[API] Devolviendo {len(trades_with_pnl)} trades activos")
     return {"trades": trades_with_pnl}
 
 @app.post("/api/trades/close/{trade_id}")
