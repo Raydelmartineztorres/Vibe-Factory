@@ -46,7 +46,7 @@ export default function Home() {
   } | null>(null);
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [trades, setTrades] = useState<any[]>([]);
-  const [balance, setBalance] = useState<{ USDT: number, BTC: number } | null>(null);
+  const [balance, setBalance] = useState<{ USDT: number, BTC: number, mode?: string } | null>(null);
   const lastTrade = trades.length > 0 ? trades[trades.length - 1] : null;
   const [tradingEnabled, setTradingEnabled] = useState(true);
   const [memoryStats, setMemoryStats] = useState<any>(null);
@@ -669,48 +669,91 @@ export default function Home() {
         <section className="rounded-2xl border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold">Simulation Engine</h2>
-              <p className="text-gray-400 font-medium">
-                Run a historical backtest using the current strategy configuration.
+              <h2 className="text-2xl font-semibold flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${tradingEnabled ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-3 w-3 ${tradingEnabled ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                </span>
+                Live Trading Engine
+              </h2>
+              <p className="text-gray-400 font-medium mt-1">
+                {balance?.mode === 'real'
+                  ? "⚠️ MODO REAL: Operando con fondos reales en el Exchange."
+                  : "🛡️ MODO DEMO: Simulando operaciones (Paper Trading)."}
               </p>
             </div>
-            <button
-              onClick={runBacktest}
-              disabled={loadingBacktest || backendStatus.includes("Offline")}
-              className="rounded-full bg-primary px-8 py-3 font-bold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loadingBacktest ? "Running Simulation..." : "▶ Run Backtest"}
-            </button>
+
+            <div className="flex gap-4">
+              {/* Mode Indicator */}
+              <div className={`px-4 py-2 rounded-lg border flex items-center gap-2 font-mono text-sm ${balance?.mode === 'real'
+                ? 'bg-red-500/10 border-red-500/50 text-red-400'
+                : 'bg-blue-500/10 border-blue-500/50 text-blue-400'
+                }`}>
+                {balance?.mode === 'real' ? '🔴 REAL MONEY' : '🔵 DEMO MODE'}
+              </div>
+
+              <button
+                onClick={toggleTrading}
+                className={`rounded-full px-8 py-3 font-bold text-white transition hover:opacity-90 ${tradingEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+                  }`}
+              >
+                {tradingEnabled ? "⏹ STOP TRADING" : "▶ START TRADING"}
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (!confirm("⚠️ ¿ESTÁS SEGURO? Esto venderá TODO tu BTC al precio de mercado actual.")) return;
+                  try {
+                    const res = await fetch('/api/trade/close', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ symbol: "BTC_USDT" }),
+                    });
+                    const data = await res.json();
+                    if (data.status === "FILLED" || data.status === "SIMULATED") {
+                      alert(`✅ POSICIÓN CERRADA\nPrecio: $${data.price}\nID: ${data.id}`);
+                    } else {
+                      alert(`❌ Error: ${data.message || "No se pudo cerrar"}`);
+                    }
+                  } catch (e) {
+                    alert("❌ Error de conexión");
+                  }
+                }}
+                className="rounded-full bg-orange-600 px-6 py-3 font-bold text-white transition hover:bg-orange-700 flex items-center gap-2"
+                title="Vender todo el BTC inmediatamente (PÁNICO)"
+              >
+                🚨 CLOSE ALL
+              </button>
+            </div>
           </div>
 
-          {backtestResult && (
-            <div className="mt-8 grid gap-4 border-t border-white/10 pt-8 sm:grid-cols-3">
-              <div className="rounded-xl bg-black/20 p-4">
-                <p className="text-sm text-gray-400 mb-1 font-medium">Final Capital</p>
-                <p className="text-2xl font-mono text-green-400">
-                  ${backtestResult.final_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div
-                className="rounded-xl bg-black/20 p-4 cursor-help"
-                title="Max Drawdown: La mayor caída porcentual desde un pico hasta un valle en el capital."
-              >
-                <p className="text-sm text-gray-400 mb-1 font-medium">Max Drawdown ℹ️</p>
-                <p className="text-2xl font-mono text-red-400">
-                  {(backtestResult.max_drawdown * 100).toFixed(2)}%
-                </p>
-              </div>
-              <div
-                className="rounded-xl bg-black/20 p-4 cursor-help"
-                title="Total Trades: Número total de operaciones ejecutadas durante el backtest."
-              >
-                <p className="text-sm text-gray-400 mb-1 font-medium">Total Trades ℹ️</p>
-                <p className="text-2xl font-mono text-blue-400">
-                  {backtestResult.trades}
-                </p>
-              </div>
+          {/* Stats Row */}
+          <div className="mt-8 grid gap-4 border-t border-white/10 pt-8 sm:grid-cols-4">
+            <div className="rounded-xl bg-black/20 p-4">
+              <p className="text-sm text-gray-400 mb-1 font-medium">Balance USDT</p>
+              <p className="text-2xl font-mono text-green-400">
+                ${balance?.USDT.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '---'}
+              </p>
             </div>
-          )}
+            <div className="rounded-xl bg-black/20 p-4">
+              <p className="text-sm text-gray-400 mb-1 font-medium">Balance BTC</p>
+              <p className="text-2xl font-mono text-yellow-400">
+                {balance?.BTC.toFixed(6) || '---'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-black/20 p-4">
+              <p className="text-sm text-gray-400 mb-1 font-medium">PnL Realizado</p>
+              <p className={`text-2xl font-mono ${pnl?.realized_pnl && pnl.realized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                ${pnl?.realized_pnl.toFixed(2) || '0.00'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-black/20 p-4">
+              <p className="text-sm text-gray-400 mb-1 font-medium">Trades Hoy</p>
+              <p className="text-2xl font-mono text-blue-400">
+                {systemHealth?.trades_today || 0}
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* Trading Terminal Section - ALWAYS VISIBLE */}
@@ -1137,10 +1180,10 @@ export default function Home() {
                       </div>
                     </div>
                     <div className={`px-3 py-1 rounded-full border text-sm font-bold ${sentiment.overall === 'bullish'
-                        ? 'bg-green-900/50 text-green-300 border-green-500/30'
-                        : sentiment.overall === 'bearish'
-                          ? 'bg-red-900/50 text-red-300 border-red-500/30'
-                          : 'bg-gray-900/50 text-gray-300 border-gray-500/30'
+                      ? 'bg-green-900/50 text-green-300 border-green-500/30'
+                      : sentiment.overall === 'bearish'
+                        ? 'bg-red-900/50 text-red-300 border-red-500/30'
+                        : 'bg-gray-900/50 text-gray-300 border-gray-500/30'
                       }`}>
                       {sentiment.overall === 'bullish' && '🐂 BULLISH'}
                       {sentiment.overall === 'bearish' && '🐻 BEARISH'}
@@ -1176,8 +1219,8 @@ export default function Home() {
                     <div className="bg-black/20 rounded-lg p-2 text-center">
                       <div className="text-[10px] text-gray-400">Confidence</div>
                       <div className={`text-sm font-mono font-bold ${sentiment.confidence === 'high' ? 'text-green-400' :
-                          sentiment.confidence === 'medium' ? 'text-yellow-400' :
-                            'text-gray-400'
+                        sentiment.confidence === 'medium' ? 'text-yellow-400' :
+                          'text-gray-400'
                         }`}>
                         {sentiment.confidence.toUpperCase()}
                       </div>

@@ -20,6 +20,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- BASIC AUTHENTICATION ---
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+import secrets
+import os
+from fastapi import Request, HTTPException, status
+
+# Default credentials (change via env vars in production!)
+AUTH_USERNAME = os.getenv("AUTH_USERNAME", "raydemartineztorres")
+AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "Limallo33")
+
+class BasicAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Skip auth for health check (optional, but good for monitoring)
+        if request.url.path == "/api/health":
+            return await call_next(request)
+            
+        # Check for Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return self._request_auth()
+            
+        try:
+            scheme, credentials = auth_header.split()
+            if scheme.lower() != 'basic':
+                return self._request_auth()
+                
+            import base64
+            decoded = base64.b64decode(credentials).decode("ascii")
+            username, _, password = decoded.partition(":")
+            
+            # Verify credentials safely
+            is_correct_username = secrets.compare_digest(username, AUTH_USERNAME)
+            is_correct_password = secrets.compare_digest(password, AUTH_PASSWORD)
+            
+            if not (is_correct_username and is_correct_password):
+                return self._request_auth()
+                
+        except Exception:
+            return self._request_auth()
+
+        return await call_next(request)
+
+    def _request_auth(self):
+        return Response(
+            content="Authentication required",
+            status_code=401,
+            headers={"WWW-Authenticate": "Basic realm='Vibe Factory Access'"},
+        )
+
+# Add middleware to app
+app.add_middleware(BasicAuthMiddleware)
+
 @app.get("/api/health")
 def health_check():
     return {"status": "online", "message": "Vibe Factory Backend is running"}
@@ -52,8 +105,12 @@ async def api_run_backtest():
 @app.post("/api/trade")
 async def api_trade(payload: dict):
     from broker_api_handler import execute_order
-    # Default to demo mode for now
-    result = await execute_order(payload, mode="demo")
+    import os
+    
+    # Determine mode from env var (default to demo for safety)
+    mode = os.getenv("TRADING_MODE", "demo")
+    
+    result = await execute_order(payload, mode=mode)
     
     # Actualizar estado de la estrategia si la orden fue exitosa
     if result.get("status") in ["FILLED", "SIMULATED"]:
@@ -63,6 +120,23 @@ async def api_trade(payload: dict):
             size=payload["size"],
             result=result
         )
+        
+    return result
+
+@app.post("/api/trade/close")
+async def api_close_position(payload: dict):
+    """Cierra inmediatamente la posición del activo especificado."""
+    from broker_api_handler import close_position
+    import os
+    
+    mode = os.getenv("TRADING_MODE", "demo")
+    symbol = payload.get("symbol", "BTC_USDT")
+    
+    result = await close_position(symbol, mode=mode)
+    
+    # Resetear estado interno de la estrategia si es necesario
+    if result.get("status") in ["FILLED", "SIMULATED"]:
+        _strategy_instance.position = 0.0
         
     return result
 
@@ -83,7 +157,7 @@ async def startup_event():
     # 1. Pipeline de datos y trading
     asyncio.create_task(bootstrap_data_pipeline(
         strategy=_strategy_instance,
-        live_mode="demo"
+        live_mode="demo" # Data pipeline always runs in demo/paper mode for now
     ))
     
     # 2. Optimizador (Aprendizaje)
@@ -357,7 +431,7 @@ def get_ai_advice():
                 action = "sell"
                 win_probability = 55
             confidence = "medium"
-
+        
         # Calculate SL/TP levels based on ATR
         current_price = closes_series.iloc[-1]
         sl_price = 0
@@ -610,12 +684,17 @@ def get_recent_news():
 
 @app.get("/api/balance")
 async def get_balance():
-    """Obtiene el balance simulado."""
-    from broker_api_handler import get_simulated_balance
-    balance = await get_simulated_balance()
+    """Obtiene el balance (simulado o real)."""
+    from broker_api_handler import get_balance
+    import os
+    
+    mode = os.getenv("TRADING_MODE", "demo")
+    balance = await get_balance(mode=mode)
+    
     return {
         "USDT": balance.get('USDT', 0),
         "BTC": balance.get('BTC', 0),
+        "mode": mode
     }
 
 
