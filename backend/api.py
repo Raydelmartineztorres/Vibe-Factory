@@ -730,6 +730,54 @@ async def get_position():
     return position
 
 
+# === INDIVIDUAL TRADES ===
+@app.get("/api/trades/active")
+def get_active_trades():
+    """Devuelve todos los trades abiertos con PnL en tiempo real."""
+    from trade_tracker import get_tracker
+    from data_collector import get_current_price
+    
+    tracker = get_tracker()
+    current_price = get_current_price("BTC", "USD")
+    
+    active_trades = tracker.get_active_trades()
+    
+    # Calcular PnL en vivo para cada trade
+    trades_with_pnl = []
+    for trade in active_trades:
+        trade_with_pnl = tracker.calculate_live_pnl(trade, current_price)
+        trades_with_pnl.append(trade_with_pnl)
+    
+    return {"trades": trades_with_pnl}
+
+@app.post("/api/trades/close/{trade_id}")
+def close_single_trade(trade_id: int):
+    """Cierra un trade individual."""
+    from trade_tracker import get_tracker
+    from data_collector import get_current_price
+    
+    tracker = get_tracker()
+    current_price = get_current_price("BTC", "USD")
+    
+    trade = tracker.close_trade(trade_id, current_price)
+    
+    if trade:
+        return {"success": True, "trade": trade}
+    return {"success": False, "error": "Trade not found"}
+
+@app.post("/api/trades/reverse/{trade_id}")
+def reverse_trade_direction(trade_id: int):
+    """Invierte la dirección de un trade (LONG→SHORT o SHORT→LONG)."""
+    from trade_tracker import get_tracker
+    
+    tracker = get_tracker()
+    trade = tracker.reverse_trade(trade_id)
+    
+    if trade:
+        return {"success": True, "trade": trade}
+    return {"success": False, "error": "Trade not found"}
+
+
 # === AUTO-TRADING BACKGROUND TASK ===
 # TEMPORALMENTE DESHABILITADO - Implementar correctamente
 # @app.on_event("startup")

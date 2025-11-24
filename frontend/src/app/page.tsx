@@ -65,6 +65,7 @@ export default function Home() {
   const [sentiment, setSentiment] = useState<any>(null);
   const [aiAdvice, setAiAdvice] = useState<any>(null);
   const [position, setPosition] = useState<any>(null);
+  const [activeTrades, setActiveTrades] = useState<any[]>([]);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
@@ -245,6 +246,24 @@ export default function Home() {
 
     fetchPosition();
     const interval = setInterval(fetchPosition, 3000); // Update every 3 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchActiveTrades = async () => {
+      try {
+        const res = await fetch("/api/trades/active");
+        if (res.ok) {
+          const data = await res.json();
+          setActiveTrades(data.trades || []);
+        }
+      } catch (error) {
+        // Silently fail
+      }
+    };
+
+    fetchActiveTrades();
+    const interval = setInterval(fetchActiveTrades, 3000); // Update every 3 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -777,8 +796,8 @@ export default function Home() {
           {/* Position Status Card */}
           {position && (
             <div className={`mt-6 rounded-2xl border p-6 transition-all duration-300 ${position.is_open
-                ? 'bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30'
-                : 'bg-black/20 border-white/10'
+              ? 'bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30'
+              : 'bg-black/20 border-white/10'
               }`}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-semibold flex items-center gap-2">
@@ -831,6 +850,96 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {/* Individual Trades Table */}
+        {activeTrades.length > 0 && (
+          <section className="mt-6">
+            <h3 className="text-2xl font-bold mb-4">📊 Trades Activos</h3>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-gray-400 border-b border-white/10">
+                    <th className="text-left py-3 px-4">ID</th>
+                    <th className="text-left py-3 px-4">Lado</th>
+                    <th className="text-right py-3 px-4">Tamaño</th>
+                    <th className="text-right py-3 px-4">Entrada</th>
+                    <th className="text-right py-3 px-4">Actual</th>
+                    <th className="text-right py-3 px-4">PnL</th>
+                    <th className="text-center py-3 px-4">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeTrades.map((trade) => (
+                    <tr key={trade.id} className="border-b border-white/5 hover:bg-white/5 transition">
+                      <td className="py-3 px-4 font-mono">#{trade.id}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${trade.side === 'LONG'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
+                          }`}>
+                          {trade.side}
+                        </span>
+                      </td>
+                      <td className="text-right py-3 px-4 font-mono text-yellow-400">
+                        {trade.size.toFixed(4)} BTC
+                      </td>
+                      <td className="text-right py-3 px-4 font-mono text-blue-400">
+                        ${trade.entry_price.toLocaleString()}
+                      </td>
+                      <td className="text-right py-3 px-4 font-mono text-purple-400">
+                        ${trade.current_price.toLocaleString()}
+                      </td>
+                      <td className={`text-right py-3 px-4 font-mono font-bold ${trade.unrealized_pnl_usd >= 0 ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                        {trade.unrealized_pnl_usd >= 0 ? '+' : ''}${trade.unrealized_pnl_usd.toFixed(2)}
+                        <span className="text-xs ml-2">
+                          ({trade.unrealized_pnl_pct >= 0 ? '+' : ''}{trade.unrealized_pnl_pct.toFixed(2)}%)
+                        </span>
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <div className="flex gap-2 justify-center">
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`¿Cerrar trade #${trade.id}?`)) return;
+                              try {
+                                const res = await fetch(`/api/trades/close/${trade.id}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert(`✅ Trade cerrado con PnL: $${data.trade.pnl.toFixed(2)}`);
+                                }
+                              } catch (e) {
+                                alert("❌ Error cerrando trade");
+                              }
+                            }}
+                            className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm font-bold transition"
+                          >
+                            Cerrar
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/trades/reverse/${trade.id}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert(`🔄 Trade invertido: ${data.trade.side}`);
+                                }
+                              } catch (e) {
+                                alert("❌ Error invirtiendo trade");
+                              }
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-bold transition"
+                          >
+                            🔄 Invertir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Trading Terminal Section - ALWAYS VISIBLE */}
         <section className="grid gap-6 lg:grid-cols-4">

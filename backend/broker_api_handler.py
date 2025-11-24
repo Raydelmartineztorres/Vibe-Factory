@@ -110,6 +110,11 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "real"]) ->
                 _current_position["entry_price"] = current_price
                 _current_position["is_open"] = True
                 
+                # Registrar en trade tracker
+                from trade_tracker import get_tracker
+                tracker = get_tracker()
+                tracker.open_trade(size, current_price, "LONG")
+                
                 print(f"[SIMULATED] ✅ COMPRA ejecutada: {size} BTC @ ${current_price:.2f}")
                 return {
                     "status": "FILLED",
