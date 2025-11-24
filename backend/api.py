@@ -728,33 +728,34 @@ async def get_position():
 
 
 # === AUTO-TRADING BACKGROUND TASK ===
-@app.on_event("startup")
-async def startup_event():
-    """Inicia el auto-trading background task."""
-    global _auto_trading_task
-    from auto_trader import auto_trading_loop
-    
-    # Función que devuelve si el trading está habilitado
-    def is_trading_enabled():
-        return _trading_enabled
-    
-    # Iniciar el loop en background
-    _auto_trading_task = asyncio.create_task(
-        auto_trading_loop(_strategy_instance, is_trading_enabled)
-    )
-    print("[API] 🚀 Auto-trading background task started")
+# TEMPORALMENTE DESHABILITADO - Implementar correctamente
+# @app.on_event("startup")
+# async def startup_event():
+#     """Inicia el auto-trading background task."""
+#     global _auto_trading_task
+#     from auto_trader import auto_trading_loop
+#     
+#     # Función que devuelve si el trading está habilitado
+#     def is_trading_enabled():
+#         return _trading_enabled
+#     
+#     # Iniciar el loop en background
+#     _auto_trading_task = asyncio.create_task(
+#         auto_trading_loop(_strategy_instance, is_trading_enabled)
+#     )
+#     print("[API] 🚀 Auto-trading background task started")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Detiene el auto-trading background task."""
-    global _auto_trading_task
-    if _auto_trading_task:
-        _auto_trading_task.cancel()
-        try:
-            await _auto_trading_task
-        except asyncio.CancelledError:
-            pass
-    print("[API] 🛑 Auto-trading background task stopped")
+# @app.on_event("shutdown")
+# async def shutdown_event():
+#     """Detiene el auto-trading background task."""
+#     global _auto_trading_task
+#     if _auto_trading_task:
+#         _auto_trading_task.cancel()
+#         try:
+#             await _auto_trading_task
+#         except asyncio.CancelledError:
+#             pass
+#     print("[API] 🛑 Auto-trading background task stopped")
 
 
 # === STATIC FILE SERVING (Frontend) ===
