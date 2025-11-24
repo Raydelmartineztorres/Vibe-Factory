@@ -575,18 +575,21 @@ def get_risk_stats():
 
 # Fast Training & System Health
 @app.post("/api/training/run")
-async def run_fast_training(num_trades: int = 100):
+def run_fast_training(num_trades: int = 100):
     """Ejecuta entrenamiento rápido con datos históricos."""
     try:
         from fast_training import FastTrainer
         trainer = FastTrainer()
-        stats = await trainer.run_quick_training(num_trades=num_trades)
+        # Ejecutar sincrónicamente (no async)
+        stats = trainer.run_quick_training(num_trades=num_trades)
         return {
             "success": True,
             "stats": stats,
-            "message": f"Entrenamiento completado: {stats['trades_executed']} trades"
+            "message": f"Entrenamiento completado: {stats.get('trades_executed', 0)} trades"
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
             "error": str(e),
