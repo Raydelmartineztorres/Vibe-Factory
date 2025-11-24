@@ -796,8 +796,8 @@ export default function Home() {
                 </h3>
                 {position.is_open && (
                   <div className={`px-3 py-1 rounded-lg font-mono text-sm font-bold ${position.unrealized_pnl_usd >= 0
-                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
                     }`}>
                     {position.unrealized_pnl_usd >= 0 ? '+' : ''}${position.unrealized_pnl_usd.toFixed(2)}
                     {' '}({position.unrealized_pnl_pct >= 0 ? '+' : ''}{position.unrealized_pnl_pct.toFixed(2)}%)
