@@ -52,6 +52,7 @@ class RiskStrategy:
         from ml_predictor import MLPredictor
         from market_timing import MarketTiming
         from sentiment_manager import SentimentManager
+        from risk_manager import RiskManager
         
         # ML y Memory config (por defecto activados)
         self.ml_enabled = False
@@ -61,6 +62,7 @@ class RiskStrategy:
         self.ml_predictor = MLPredictor()
         self.market_timing = MarketTiming()
         self.sentiment_manager = SentimentManager()
+        self.risk_manager = RiskManager(initial_capital=self.config.capital_virtual)
         self.memory = TradeMemory()
         self.last_prediction = None
         self.position_id = 0  # Contador para IDs de posición
