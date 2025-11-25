@@ -67,6 +67,11 @@ export default function Home() {
   const [position, setPosition] = useState<any>(null);
   const [activeTrades, setActiveTrades] = useState<any[]>([]);
 
+  // 🐱 EL GATO Intelligence States
+  const [elGatoStatus, setElGatoStatus] = useState<any>(null);
+  const [elGatoDailyProgress, setElGatoDailyProgress] = useState<any>(null);
+  const [elGatoRecommendation, setElGatoRecommendation] = useState<string>("");
+
   // Symbol Selection
   const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
   const [tradingMode, setTradingMode] = useState("demo"); // demo, testnet, real
@@ -347,6 +352,37 @@ export default function Home() {
         if (res.ok) {
           const data = await res.json();
           setSentiment(data);
+        }
+      } catch (error) { }
+    };
+
+    // 🐱 EL GATO Fetch Functions
+    const fetchElGatoStatus = async () => {
+      try {
+        const res = await fetch("/api/el-gato/status");
+        if (res.ok) {
+          const data = await res.json();
+          setElGatoStatus(data);
+        }
+      } catch (error) { }
+    };
+
+    const fetchElGatoDailyProgress = async () => {
+      try {
+        const res = await fetch("/api/el-gato/daily-progress");
+        if (res.ok) {
+          const data = await res.json();
+          setElGatoDailyProgress(data);
+        }
+      } catch (error) { }
+    };
+
+    const fetchElGatoRecommendation = async () => {
+      try {
+        const res = await fetch("/api/el-gato/recommendation");
+        if (res.ok) {
+          const data = await res.json();
+          setElGatoRecommendation(data.recommendation || "");
         }
       } catch (error) { }
     };
