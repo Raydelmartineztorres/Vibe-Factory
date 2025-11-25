@@ -594,43 +594,89 @@ export default function Home() {
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#0a0a0a' },
-        textColor: '#fbbf24', // Yellow for all text
+        background: { type: ColorType.Solid, color: '#0d0d0d' }, // Darker, richer black
+        textColor: '#a8a8a8', // Softer gray for text
+        fontSize: 12,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       },
       grid: {
-        vertLines: { color: '#1a1a1a', style: 1 },
-        horzLines: { color: '#1a1a1a', style: 1 },
+        vertLines: {
+          color: '#1a1a2e', // Subtle dark blue-gray
+          style: 1,
+          visible: true,
+        },
+        horzLines: {
+          color: '#1a1a2e',
+          style: 1,
+          visible: true,
+        },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: 550, // Slightly taller for better visibility
       timeScale: {
         timeVisible: true,
         secondsVisible: true,
-        borderColor: '#2a2a2a',
+        borderColor: '#252538',
+        borderVisible: true,
+        rightOffset: 5,
+        barSpacing: 8, // More space between candles
+        minBarSpacing: 4,
+        fixLeftEdge: false,
+        fixRightEdge: false,
       },
       rightPriceScale: {
-        borderColor: '#2a2a2a',
-        textColor: '#fbbf24', // Yellow price numbers
+        borderColor: '#252538',
+        borderVisible: true,
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
+        autoScale: true,
       },
       crosshair: {
+        mode: 1,
         vertLine: {
-          color: '#6a6a6a',
-          labelBackgroundColor: '#1a1a1a',
+          width: 1,
+          color: '#4488ff',
+          style: 2, // Dashed line
+          labelBackgroundColor: '#4488ff',
         },
         horzLine: {
-          color: '#6a6a6a',
-          labelBackgroundColor: '#1a1a1a',
+          width: 1,
+          color: '#4488ff',
+          style: 2,
+          labelBackgroundColor: '#4488ff',
         },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
     });
 
-    // Candlesticks FIRST (main chart - uses 'right' scale)
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
+    chartRef.current = chart;
+
+    // 🕯️ Premium Candlestick Series
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: '#00ff88', // Vibrant green
+      downColor: '#ff4466', // Vibrant red
+      borderVisible: true,
+      wickUpColor: '#00ff88',
+      wickDownColor: '#ff4466',
+      borderUpColor: '#00ff88',
+      borderDownColor: '#ff4466',
+      priceFormat: {
+        type: 'price',
+        precision: 2,
+        minMove: 0.01,
+      },
       priceScaleId: 'right',
     });
 
