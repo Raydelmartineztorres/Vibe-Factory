@@ -70,6 +70,37 @@ class RiskStrategy:
         # Sistema de estrategias múltiples
         self.strategy_manager = get_strategy_manager()
         print(f"[STRATEGY] ✅ Inicializado con estrategia: {self.strategy_manager.active_strategy}")
+
+    async def execute_strategy(self):
+        """
+        Punto de entrada para el auto-trader.
+        Obtiene el precio actual y ejecuta el ciclo de análisis (on_tick).
+        """
+        from broker_api_handler import get_current_price
+        
+        # 1. Obtener precio actual
+        symbol = "BTC/USDT"
+        price = await get_current_price(symbol, mode="demo") # Forzamos demo por seguridad ahora
+        
+        if price <= 0:
+            print("[STRATEGY] ⚠️ No se pudo obtener precio válido")
+            return None
+            
+        # 2. Construir payload simulando un tick
+        payload = {
+            "symbol": symbol,
+            "price": price,
+            "timestamp": datetime.now().timestamp()
+        }
+        
+        # 3. Ejecutar lógica principal
+        await self.on_tick(payload)
+        
+        # 4. Retornar último trade si ocurrió recién
+        if self.trades and (datetime.now().timestamp() - self.trades[-1].timestamp < 2):
+            return self.trades[-1]
+            
+        return None
         
     def _fill_missing_candles(self, from_time: int, to_time: int, last_price: float):
         """Rellena gaps creando velas usando el último precio conocido."""

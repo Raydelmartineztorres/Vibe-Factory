@@ -225,6 +225,27 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
         return {"status": "FAILED", "error": f"Modo '{mode}' no soportado"}
 
 
+async def get_current_price(symbol: str, mode: Literal["demo", "real"] = "demo") -> float:
+    """
+    Obtiene el precio actual del símbolo.
+    En demo, simula un precio basado en random walk si no hay conexión real.
+    """
+    if mode == "demo":
+        # Simulación simple para demo si no hay exchange conectado
+        # En producción idealmente conectaríamos a un feed público
+        # Por ahora, usar random walk alrededor de un precio base o el último conocido
+        base_price = 90000.0
+        variation = random.uniform(-50, 50)
+        return base_price + variation
+
+    try:
+        exchange = await _get_exchange("real")
+        ticker = await exchange.fetch_ticker(symbol)
+        return float(ticker['last'])
+    except Exception as e:
+        print(f"[BROKER] Error fetching price: {e}")
+        return 0.0
+
 async def get_balance(mode: Literal["demo", "real"] = "demo"):
     """Retorna el balance (simulado o real)."""
     if mode == "demo":
