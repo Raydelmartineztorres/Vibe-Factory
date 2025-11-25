@@ -104,22 +104,22 @@ class StrategyManager:
     STRATEGIES = {
         "AGGRESSIVE": StrategyProfile(
             name="AGGRESSIVE",
-            take_profit_pct=0.5,
-            stop_loss_pct=0.3,
+            take_profit_pct=0.4,  # Optimized: +0.4% (was 0.5%)
+            stop_loss_pct=0.2,    # Optimized: -0.2% (was 0.3%)
             min_confidence=0.6,
             description="Scalping rápido: muchos trades pequeños"
         ),
         "BALANCED": StrategyProfile(
             name="BALANCED",
-            take_profit_pct=2.0,
-            stop_loss_pct=1.0,
+            take_profit_pct=1.5,  # Optimized: +1.5% (was 2.0%)
+            stop_loss_pct=0.7,    # Optimized: -0.7% (was 1.0%)
             min_confidence=0.7,
             description="Swing trading: balance riesgo/recompensa"
         ),
         "CONSERVATIVE": StrategyProfile(
             name="CONSERVATIVE",
-            take_profit_pct=5.0,
-            stop_loss_pct=2.0,
+            take_profit_pct=4.0,  # Optimized: +4.0% (was 5.0%)
+            stop_loss_pct=1.8,    # Optimized: -1.8% (was 2.0%)
             min_confidence=0.8,
             description="Position trading: pocos trades grandes"
         )
