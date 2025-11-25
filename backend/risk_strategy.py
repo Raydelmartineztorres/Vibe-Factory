@@ -752,59 +752,64 @@ class RiskStrategy:
         return patterns
 
     def register_trade(self, side: str, price: float, size: float, result: dict) -> None:
-        """Registra un trade manual o externo en la estrategia."""
+    def register_trade(self, side: str, price: float, size: float, result: dict, source: str = "manual"):
+        """
+        Registra un trade manual o externo en la estrategia.
+        
+        Args:
+            source: "auto" for EL GATO, "manual" for user trades
+        """
         import time
-        current_time = time.time()
+        from datetime import datetime
+        self.position_id += 1
         
-        # Contexto manual (aproximado)
-        ctx = MarketContext(trend="MANUAL", volatility="MANUAL") 
-        
-        # Actualizar posición y PnL
-        if side == "BUY":
-            # Si teníamos short, cerrar y realizar PnL
-            if self.position < 0:
-                # Asumimos cierre total por simplicidad en demo
-                pnl = (self.entry_price - price) * abs(self.position)
-                self.realized_pnl += pnl
-                self.memory.add_experience(ctx, pnl) # Guardar experiencia manual
-                self.position = 0
-                self.entry_price = 0
-            else:
-                # Promediar precio de entrada si ya teníamos long (simple average)
-                total_cost = (self.position * self.entry_price) + (size * price)
-                self.position += size
-                self.entry_price = total_cost / self.position if self.position > 0 else price
-                
-        elif side == "SELL":
-            # Si teníamos long, cerrar y realizar PnL
-            if self.position > 0:
-                pnl = (price - self.entry_price) * abs(self.position) # Asumiendo cierre parcial o total
-                # Si cerramos todo
-                if size >= self.position:
-                    self.realized_pnl += pnl
-                    self.memory.add_experience(ctx, pnl) # Guardar experiencia manual
-                    self.position = 0
-                    self.entry_price = 0
-                else:
-                    # Cierre parcial
-                    self.realized_pnl += (price - self.entry_price) * size
-                    self.position -= size
-            else:
-                # Abrir short
-                total_cost = (abs(self.position) * self.entry_price) + (size * price)
-                self.position -= size
-                self.entry_price = total_cost / abs(self.position) if abs(self.position) > 0 else price
-
-        self.last_trade_time = current_time
-        self.trades.append({
-            "id": result.get("id", f"manual_{current_time}"),
-            "time": current_time,
-            "side": side,
+        trade = {
+            "id": result.get("id", f"T{int(time.time())}"),
+            "position_id": self.position_id,
+            "side": side.upper(),
             "price": price,
             "size": size,
-            "result": result,
-            "source": "MANUAL"
-        })
+            "time": int(time.time()),
+            "status": result.get("status", "FILLED"),
+            "source": source,  # 🐱 auto or 👤 manual
+        }
+        
+        # Update position tracking
+        if side.upper() == "BUY":
+            if self.position == 0:
+                self.entry_price = price
+            else:
+                # Average down/up
+                total_cost = (self.position * self.entry_price) + (size * price)
+                self.position += size
+                self.entry_price = total_cost / self.position if self.position != 0 else price
+            self.position += size
+            self.last_trade_time = time.time()
+        elif side.upper() == "SELL":
+            if self.position > 0:
+                # Close or reduce position
+                exit_pnl = (price - self.entry_price) * min(size, self.position)
+                self.realized_pnl += exit_pnl
+                trade["pnl"] = exit_pnl
+                self.position -= size
+                if self.position <= 0:
+                    self.position = 0
+                    self.entry_price = 0
+            self.last_trade_time = time.time()
+        
+        self.trades.append(trade)
+        
+        # 🧠 Update Memory
+        if self.memory_enabled:
+            context = MarketContext(
+                hour=datetime.now().hour,
+                day_of_week=datetime.now().strftime("%A"),
+            )
+            self.memory.add_trade(side, price, True, context)
+        
+        icon = "🐱" if source == "auto" else "👤"
+        print(f"[STRATEGY] {icon} Trade registered: {side} {size} @ ${price:.2f}")
+        return trade
 
     def check_trade(
         self,
