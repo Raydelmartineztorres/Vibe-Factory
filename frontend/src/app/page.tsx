@@ -995,6 +995,7 @@ export default function Home() {
                 <thead>
                   <tr className="text-gray-400 border-b border-white/10">
                     <th className="text-left py-3 px-4">ID</th>
+                    <th className="text-center py-3 px-4">Origen</th>
                     <th className="text-left py-3 px-4">Lado</th>
                     <th className="text-right py-3 px-4">Tamaño</th>
                     <th className="text-right py-3 px-4">Entrada</th>
@@ -1007,6 +1008,9 @@ export default function Home() {
                   {activeTrades.filter(t => t.symbol === undefined || t.symbol === selectedSymbol.replace("/", "_")).map((trade) => (
                     <tr key={trade.id} className="border-b border-white/5 hover:bg-white/5 transition">
                       <td className="py-3 px-4 font-mono">#{trade.id}</td>
+                      <td className="py-3 px-4 text-center text-xl" title={trade.source === 'auto' ? 'EL GATO (Auto)' : 'Usuario (Manual)'}>
+                        {trade.source === 'auto' ? '🐱' : '👤'}
+                      </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded text-xs font-bold ${trade.side === 'LONG'
                           ? 'bg-green-500/20 text-green-400'
