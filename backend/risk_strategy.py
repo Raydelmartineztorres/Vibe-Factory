@@ -63,6 +63,24 @@ class RiskStrategy:
         self.last_prediction = None
         self.position_id = 0  # Contador para IDs de posición
         
+    def _fill_missing_candles(self, from_time: int, to_time: int, last_price: float):
+        """Rellena gaps creando velas usando el último precio conocido."""
+        import random
+        current_time = from_time + 5
+        
+        while current_time < to_time:
+            # Crear vela de relleno con precio constante
+            filler_candle = Candle(
+                time=current_time,
+                open=last_price,
+                high=last_price,
+                low=last_price,
+                close=last_price,
+                volume=random.uniform(0.1, 1.0)  # Volumen mínimo para gaps
+            )
+            self.candles.append(filler_candle)
+            current_time += 5
+    
     def _update_candle(self, price: float, timestamp: float):
         """Agrega ticks a la vela actual (5 segundos)."""
         # Redondear al múltiplo de 5 segundos más cercano (floor)
@@ -84,6 +102,15 @@ class RiskStrategy:
             self.current_candle.close = price
             self.current_candle.volume += tick_vol
         else:
+            # ⭐ DETECTAR Y RELLENAR GAPS
+            last_candle_time = self.current_candle.time
+            time_gap = candle_time - last_candle_time
+            
+            # Si hay gap mayor a 5 segundos, rellenar
+            if time_gap > 5:
+                last_close = self.current_candle.close
+                self._fill_missing_candles(last_candle_time, candle_time, last_close)
+            
             # Cerrar vela anterior y abrir nueva
             self.candles.append(self.current_candle)
             # Mantener solo últimas 1000 velas
