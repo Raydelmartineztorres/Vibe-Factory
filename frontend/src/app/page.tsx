@@ -598,61 +598,54 @@ export default function Home() {
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#0d0d0d' }, // Darker, richer black
-        textColor: '#a8a8a8', // Softer gray for text
+        background: { type: ColorType.Solid, color: '#131722' }, // Standard TV Dark Background
+        textColor: '#D9D9D9', // Brighter text for visibility
         fontSize: 12,
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       },
       grid: {
-        vertLines: {
-          color: '#1a1a2e', // Subtle dark blue-gray
-          style: 1,
-          visible: true,
-        },
-        horzLines: {
-          color: '#1a1a2e',
-          style: 1,
-          visible: true,
-        },
+        vertLines: { color: '#2B2B43', style: 1, visible: true },
+        horzLines: { color: '#2B2B43', style: 1, visible: true },
       },
       width: chartContainerRef.current.clientWidth,
       height: 550,
       timeScale: {
         timeVisible: true,
-        secondsVisible: true,
-        borderColor: '#252538',
+        secondsVisible: false, // Usually seconds clutter the view
+        borderColor: '#2B2B43',
         borderVisible: true,
-        rightOffset: 10,  // More space on right
-        barSpacing: 10,   // More spacing for clarity
-        minBarSpacing: 5,
+        rightOffset: 12,
+        barSpacing: 12,   // Wider spacing like TV
+        minBarSpacing: 2,
         fixLeftEdge: false,
         fixRightEdge: false,
-        visible: true,    // Force visibility
+        visible: true,
       },
       rightPriceScale: {
-        borderColor: '#252538',
+        borderColor: '#2B2B43',
         borderVisible: true,
         scaleMargins: {
-          top: 0.2,      // More margin to avoid cutting off high candles
-          bottom: 0.2,   // More margin for low candles
+          top: 0.2,
+          bottom: 0.2,
         },
-        mode: 1,         // PriceScaleMode.Normal
-        autoScale: false, // ❌ Disable autoScale to respect user manual zoom/pan
+        mode: 1,
+        autoScale: false,
         visible: true,
+        alignLabels: true,
       },
       crosshair: {
         mode: 1,
         vertLine: {
           width: 1,
-          color: '#4488ff',
-          style: 2, // Dashed line
-          labelBackgroundColor: '#4488ff',
+          color: '#758696',
+          style: 3,
+          labelBackgroundColor: '#758696',
         },
         horzLine: {
           width: 1,
-          color: '#4488ff',
-          style: 2,
-          labelBackgroundColor: '#4488ff',
+          color: '#758696',
+          style: 3,
+          labelBackgroundColor: '#758696',
         },
       },
       handleScroll: {
@@ -670,15 +663,13 @@ export default function Home() {
 
     chartRef.current = chart;
 
-    // 🕯️ Premium Candlestick Series
+    // 🕯️ Standard TradingView Candlestick Colors
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#00ff88', // Vibrant green
-      downColor: '#ff4466', // Vibrant red
-      borderVisible: true,
-      wickUpColor: '#00ff88',
-      wickDownColor: '#ff4466',
-      borderUpColor: '#00ff88',
-      borderDownColor: '#ff4466',
+      upColor: '#089981',        // TV Green
+      downColor: '#F23645',      // TV Red
+      borderVisible: false,      // TV usually doesn't show borders if filled
+      wickUpColor: '#089981',
+      wickDownColor: '#F23645',
       priceScaleId: 'right',
     });
 
