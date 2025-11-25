@@ -139,7 +139,7 @@ async def _get_exchange(mode: Literal["testnet", "real", "coinbase"] = "real"):
 #         raise e
 
 
-async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real", "oanda_demo", "oanda_real", "coinbase"]) -> dict:
+async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real", "coinbase"]) -> dict:
     """
     Envía la orden al broker configurado o la simula.
     """
@@ -252,14 +252,8 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
             print(f"[{mode.upper()}] ❌ Error ejecutando orden: {e}")
             return {"status": "FAILED", "error": str(e)}
     
-    # --- MODO OANDA (DESHABILITADO TEMPORALMENTE) ---
-    elif mode in ["oanda_demo", "oanda_real"]:
-        return {
-            "status": "FAILED", 
-            "error": "OANDA está temporalmente deshabilitado. Use Paper Trading, Binance, o Coinbase."
-        }
-    
     # --- MODO REAL (Binance o Coinbase) ---
+    else:
             # Crear orden de mercado
             # Nota: Algunos exchanges requieren 'create_market_buy_order' especifico, 
             # pero create_order es el método unificado.
