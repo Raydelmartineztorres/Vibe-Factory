@@ -291,6 +291,35 @@ def get_strategy_recommendation():
 
 # === END STRATEGY MANAGEMENT ===
 
+# === EL GATO INTELLIGENCE ===
+
+@app.get("/api/el-gato/status")
+def get_el_gato_status():
+    """Retorna estado completo de EL GATO (IQ, tier, capacidades)."""
+    from el_gato import get_el_gato
+    el_gato = get_el_gato()
+    return el_gato.get_status()
+
+@app.get("/api/el-gato/daily-progress")
+def get_daily_progress():
+    """Retorna progreso hacia objetivo diario."""
+    from el_gato import get_el_gato
+    if _strategy_instance is None:
+        return {"error": "Sistema no inicializado"}
+    
+    el_gato = get_el_gato()
+    current_profit = _strategy_instance.realized_pnl
+    return el_gato.get_daily_progress(current_profit)
+
+@app.get("/api/el-gato/recommendation")
+def get_el_gato_recommendation():
+    """Obtiene recomendación de EL GATO."""
+    from el_gato import get_el_gato
+    el_gato = get_el_gato()
+    return {"recommendation": el_gato.get_recommendation()}
+
+# === END EL GATO INTELLIGENCE ===
+
 @app.get("/api/trades")
 def get_trades():
     """Retorna los trades ejecutados por la estrategia."""
