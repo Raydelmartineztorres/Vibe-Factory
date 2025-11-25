@@ -664,7 +664,7 @@ export default function Home() {
     chartRef.current = chart;
 
     // 🕯️ Premium Candlestick Series
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#00ff88', // Vibrant green
       downColor: '#ff4466', // Vibrant red
       borderVisible: true,
@@ -672,11 +672,6 @@ export default function Home() {
       wickDownColor: '#ff4466',
       borderUpColor: '#00ff88',
       borderDownColor: '#ff4466',
-      priceFormat: {
-        type: 'price',
-        precision: 2,
-        minMove: 0.01,
-      },
       priceScaleId: 'right',
     });
 
