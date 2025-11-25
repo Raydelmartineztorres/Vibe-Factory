@@ -392,12 +392,20 @@ export default function Home() {
     fetchRiskStats();
     fetchSystemHealth();
     fetchSentiment();
+    // 🐱 EL GATO Initial Fetch
+    fetchElGatoStatus();
+    fetchElGatoDailyProgress();
+    fetchElGatoRecommendation();
     const interval = setInterval(() => {
       fetchMlPrediction();
       fetchMarketStatus();
       fetchRiskStats();
       fetchSystemHealth();
       fetchSentiment();
+      // 🐱 EL GATO Polling  
+      fetchElGatoStatus();
+      fetchElGatoDailyProgress();
+      fetchElGatoRecommendation();
     }, 2000);
     return () => clearInterval(interval);
   }, [selectedSymbol]);
