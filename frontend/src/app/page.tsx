@@ -616,26 +616,29 @@ export default function Home() {
         },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 550, // Slightly taller for better visibility
+      height: 550,
       timeScale: {
         timeVisible: true,
         secondsVisible: true,
         borderColor: '#252538',
         borderVisible: true,
-        rightOffset: 5,
-        barSpacing: 8,
-        minBarSpacing: 4,
+        rightOffset: 10,  // More space on right
+        barSpacing: 10,   // More spacing for clarity
+        minBarSpacing: 5,
         fixLeftEdge: false,
         fixRightEdge: false,
+        visible: true,    // Force visibility
       },
       rightPriceScale: {
         borderColor: '#252538',
         borderVisible: true,
         scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
+          top: 0.2,      // More margin to avoid cutting off high candles
+          bottom: 0.2,   // More margin for low candles
         },
+        mode: 1,         // PriceScaleMode.Normal (0=Normal, 1=Log, 2=Percentage, 3=IndexedTo100) - Wait, 0 is Normal. Let's use 0.
         autoScale: true,
+        visible: true,
       },
       crosshair: {
         mode: 1,
