@@ -1161,6 +1161,102 @@ export default function Home() {
                   </select>
                 </div>
 
+                {/* 🐱 EL GATO Intelligence Dashboard */}
+                {elGatoStatus && (
+                  <div className="border-t border-white/10 pt-4">
+                    <div className="text-white/80 mb-3">
+                      <span className="text-lg">🐱</span>
+                      <span className="ml-2 font-bold">EL GATO</span>
+                      <span className="ml-2 text-xs text-white/50">v{elGatoStatus.version}</span>
+                    </div>
+
+                    {/* IQ & Tier */}
+                    <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg p-3 mb-3 border border-blue-500/30">
+                      <div className="flex justify-between items-center mb-2">
+                        <div>
+                          <div className="text-xs text-white/50">Intelligence Level</div>
+                          <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+                            IQ {Math.round(elGatoStatus.iq_level)}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-white/50">Tier {elGatoStatus.evolution_tier}/10</div>
+                          <div className="text-sm font-semibold text-yellow-400">{elGatoStatus.tier_name}</div>
+                        </div>
+                      </div>
+                      <div className="w-full bg-black/30 rounded-full h-2">
+                        <div
+                          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min((elGatoStatus.iq_level % 100), 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Daily Progress */}
+                    {elGatoDailyProgress && (
+                      <div className="bg-white/5 rounded-lg p-3 mb-3">
+                        <div className="text-xs text-white/50 mb-1">Daily Objective</div>
+                        <div className="flex justify-between items-baseline mb-2">
+                          <div className="text-lg font-bold text-green-400">
+                            ${elGatoDailyProgress.current_profit?.toFixed(2) || '0.00'}
+                          </div>
+                          <div className="text-xs text-white/50">
+                            / ${elGatoDailyProgress.daily_target?.toFixed(0) || '0'}
+                          </div>
+                        </div>
+                        <div className="w-full bg-black/30 rounded-full h-2 mb-1">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-500 ${(elGatoDailyProgress.progress_pct || 0) >= 100
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                              : 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                              }`}
+                            style={{ width: `${Math.min(elGatoDailyProgress.progress_pct || 0, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-white/40">
+                          {elGatoDailyProgress.progress_pct?.toFixed(1) || '0.0'}% complete
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                      <div className="bg-white/5 rounded p-2">
+                        <div className="text-white/50">Trades</div>
+                        <div className="font-bold">{elGatoStatus.trades_executed || 0}</div>
+                      </div>
+                      <div className="bg-white/5 rounded p-2">
+                        <div className="text-white/50">Win Rate</div>
+                        <div className="font-bold text-green-400">{elGatoStatus.win_rate?.toFixed(1) || '0.0'}%</div>
+                      </div>
+                    </div>
+
+                    {/* Capabilities */}
+                    <div className="text-xs">
+                      <div className="text-white/50 mb-1">Active Capabilities ({elGatoStatus.unlocked_capabilities?.length || 0})</div>
+                      <div className="flex flex-wrap gap-1">
+                        {(elGatoStatus.unlocked_capabilities || []).slice(0, 3).map((cap: string, idx: number) => (
+                          <span key={idx} className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs">
+                            {cap.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                        {(elGatoStatus.unlocked_capabilities?.length || 0) > 3 && (
+                          <span className="px-2 py-1 bg-white/10 text-white/50 rounded text-xs">
+                            +{(elGatoStatus.unlocked_capabilities?.length || 0) - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Recommendation */}
+                    {elGatoRecommendation && (
+                      <div className="mt-3 bg-purple-500/10 border border-purple-500/30 rounded p-2 text-xs text-purple-200">
+                        💡 {elGatoRecommendation}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Symbol Selector */}
                 <div>
                   <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
