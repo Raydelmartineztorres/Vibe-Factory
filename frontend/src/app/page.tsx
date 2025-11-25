@@ -491,17 +491,21 @@ export default function Home() {
             }
 
             // Agregar marcadores de trades
-            const markers = trades.map(t => {
+            const markers = data.trades.map((t: any) => {
               // Ajustar tiempo del trade al inicio de la vela de 5s correspondiente
               const tradeTime = Math.floor(t.time);
               const candleTime = tradeTime - (tradeTime % 5);
+
+              // 🐱 auto or 👤 manual
+              const icon = t.source === 'auto' ? '🐱' : '👤';
+              const label = t.side === 'BUY' ? 'BUY' : 'SELL';
 
               return {
                 time: candleTime,
                 position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
                 color: t.side === 'BUY' ? '#22c55e' : '#ef4444',
                 shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
-                text: t.side === 'BUY' ? 'BUY' : 'SELL',
+                text: `${icon} ${label}`, // Show icon + side
               };
             });
             candlestickSeriesRef.current.setMarkers(markers);
