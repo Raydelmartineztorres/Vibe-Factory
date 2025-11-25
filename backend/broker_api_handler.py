@@ -252,11 +252,10 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
             print(f"[{mode.upper()}] ❌ Error ejecutando orden: {e}")
             return {"status": "FAILED", "error": str(e)}
     
-    # --- MODO REAL (Binance o Coinbase) ---
+    # --- MODO DESCONOCIDO ---
     else:
-            # Crear orden de mercado
-            # Nota: Algunos exchanges requieren 'create_market_buy_order' especifico, 
-            # pero create_order es el método unificado.
+        return {"status": "FAILED", "error": f"Modo '{mode}' no soportado"}
+
             print(f"[REAL] Enviando orden {side} {size} {symbol} a {exchange.id}...")
             
             order = await exchange.create_order(
