@@ -636,8 +636,8 @@ export default function Home() {
           top: 0.2,      // More margin to avoid cutting off high candles
           bottom: 0.2,   // More margin for low candles
         },
-        mode: 1,         // PriceScaleMode.Normal (0=Normal, 1=Log, 2=Percentage, 3=IndexedTo100) - Wait, 0 is Normal. Let's use 0.
-        autoScale: true,
+        mode: 1,         // PriceScaleMode.Normal
+        autoScale: false, // ❌ Disable autoScale to respect user manual zoom/pan
         visible: true,
       },
       crosshair: {
