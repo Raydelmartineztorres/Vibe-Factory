@@ -623,11 +623,10 @@ export default function Home() {
         borderColor: '#252538',
         borderVisible: true,
         rightOffset: 5,
-        barSpacing: 8, // More space between candles
+        barSpacing: 8,
         minBarSpacing: 4,
         fixLeftEdge: false,
         fixRightEdge: false,
-        visible: true, // ✅ Ensure time labels are visible
       },
       rightPriceScale: {
         borderColor: '#252538',
@@ -637,7 +636,6 @@ export default function Home() {
           bottom: 0.1,
         },
         autoScale: true,
-        visible: true, // ✅ Ensure price labels are visible
       },
       crosshair: {
         mode: 1,
