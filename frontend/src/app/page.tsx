@@ -1256,26 +1256,30 @@ export default function Home() {
                     {/* Daily Progress */}
                     {elGatoDailyProgress && (
                       <div className="bg-white/5 rounded-lg p-3 mb-3">
-                        <div className="text-xs text-white/50 mb-1">Daily Objective</div>
-                        <div className="flex justify-between items-baseline mb-2">
-                          <div className="text-lg font-bold text-green-400">
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="text-xs text-white/50">Progreso Diario (PnL)</div>
+                          <div className="text-xs text-white/30">Meta: ${elGatoDailyProgress.daily_target?.toFixed(0)}</div>
+                        </div>
+
+                        <div className="flex items-baseline gap-2 mb-2">
+                          <div className={`text-lg font-bold ${(elGatoDailyProgress.current_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                            {(elGatoDailyProgress.current_profit || 0) > 0 ? '+' : ''}
                             ${elGatoDailyProgress.current_profit?.toFixed(2) || '0.00'}
                           </div>
-                          <div className="text-xs text-white/50">
-                            / ${elGatoDailyProgress.daily_target?.toFixed(0) || '0'}
+                          <div className={`text-xs ${(elGatoDailyProgress.current_profit || 0) >= 0 ? 'text-green-500/50' : 'text-red-500/50'}`}>
+                            {((elGatoDailyProgress.progress_pct || 0) > 0 ? '+' : '')}
+                            {elGatoDailyProgress.progress_pct?.toFixed(1) || '0.0'}%
                           </div>
                         </div>
-                        <div className="w-full bg-black/30 rounded-full h-2 mb-1">
+
+                        <div className="w-full bg-black/30 rounded-full h-2 mb-1 overflow-hidden">
                           <div
-                            className={`h-2 rounded-full transition-all duration-500 ${(elGatoDailyProgress.progress_pct || 0) >= 100
-                              ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-                              : 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                            className={`h-2 rounded-full transition-all duration-500 ${(elGatoDailyProgress.progress_pct || 0) >= 100 ? 'bg-green-500' :
+                                (elGatoDailyProgress.progress_pct || 0) > 0 ? 'bg-blue-500' : 'bg-red-500'
                               }`}
-                            style={{ width: `${Math.min(elGatoDailyProgress.progress_pct || 0, 100)}%` }}
+                            style={{ width: `${Math.max(Math.min(elGatoDailyProgress.progress_pct || 0, 100), 5)}%` }}
                           ></div>
-                        </div>
-                        <div className="text-xs text-white/40">
-                          {elGatoDailyProgress.progress_pct?.toFixed(1) || '0.0'}% complete
                         </div>
                       </div>
                     )}
