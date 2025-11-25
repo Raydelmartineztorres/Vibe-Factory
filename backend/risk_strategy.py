@@ -751,7 +751,6 @@ class RiskStrategy:
             
         return patterns
 
-    def register_trade(self, side: str, price: float, size: float, result: dict) -> None:
     def register_trade(self, side: str, price: float, size: float, result: dict, source: str = "manual"):
         """
         Registra un trade manual o externo en la estrategia.
@@ -761,6 +760,7 @@ class RiskStrategy:
         """
         import time
         from datetime import datetime
+        
         self.position_id += 1
         
         trade = {
