@@ -360,17 +360,18 @@ def get_pnl():
     }
 
 @app.get("/api/candles")
-def get_candles():
-    """Retorna las velas OHLC para el gráfico."""
-    """Get candlestick data for the chart."""
+def get_candles(timeframe: str = "5m"):
+    """
+    Retorna las velas OHLC para el gráfico.
+    
+    Args:
+        timeframe: Intervalo de tiempo (1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
+    """
     if _strategy_instance is None:
         return {"candles": []}
     
-    candles = _strategy_instance.candles
-    if _strategy_instance.current_candle:
-        candles_to_send = candles + [_strategy_instance.current_candle]
-    else:
-        candles_to_send = candles
+    # Get aggregated candles based on timeframe
+    candles = _strategy_instance.aggregate_candles(timeframe)
     
     return {
         "candles": [
@@ -380,8 +381,8 @@ def get_candles():
                 "high": c.high,
                 "low": c.low,
                 "close": c.close,
-            }
-            for c in candles_to_send
+                "volume": c.volume
+            } for c in candles
         ]
     }
 

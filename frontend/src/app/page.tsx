@@ -90,6 +90,19 @@ export default function Home() {
   const atrSeriesRef = useRef<any>(null);
   const macdSeriesRef = useRef<any>(null);
 
+  // Timeframe Selection
+  const [selectedTimeframe, setSelectedTimeframe] = useState('5m');
+  const TIMEFRAMES = [
+    { value: '1m', label: '1m' },
+    { value: '5m', label: '5m' },
+    { value: '15m', label: '15m' },
+    { value: '1h', label: '1h' },
+    { value: '4h', label: '4h' },
+    { value: '1d', label: '1D' },
+    { value: '1w', label: '1W' },
+    { value: '1M', label: '1M' }
+  ];
+
   const runBacktest = async () => {
     setLoadingBacktest(true);
     setBacktestResult(null);
@@ -467,7 +480,7 @@ export default function Home() {
 
     const fetchCandles = async () => {
       try {
-        const res = await fetch("/api/candles");
+        const res = await fetch(`/api/candles?timeframe=${selectedTimeframe}`);
         if (res.ok) {
           const data = await res.json();
           if (candlestickSeriesRef.current && data.candles.length > 0) {
@@ -1088,6 +1101,22 @@ export default function Home() {
         <section className="grid gap-6 lg:grid-cols-4">
           {/* Main Chart & Controls Area (3/4 width) */}
           <div className="lg:col-span-3 space-y-4">
+            {/* Timeframe Selector */}
+            <div className="flex items-center justify-center gap-1 py-2 px-4 bg-black/40 rounded-lg border border-white/10">
+              {TIMEFRAMES.map((tf) => (
+                <button
+                  key={tf.value}
+                  onClick={() => setSelectedTimeframe(tf.value)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${selectedTimeframe === tf.value
+                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    }`}
+                >
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+
             {/* Chart Card - simple container, 3D effects inside */}
             <div className="rounded-2xl border border-white/10 bg-white/5 p-1 shadow-lg backdrop-blur overflow-hidden relative">
               {/* Chart with internal glow effect */}
@@ -1276,7 +1305,7 @@ export default function Home() {
                         <div className="w-full bg-black/30 rounded-full h-2 mb-1 overflow-hidden">
                           <div
                             className={`h-2 rounded-full transition-all duration-500 ${(elGatoDailyProgress.progress_pct || 0) >= 100 ? 'bg-green-500' :
-                                (elGatoDailyProgress.progress_pct || 0) > 0 ? 'bg-blue-500' : 'bg-red-500'
+                              (elGatoDailyProgress.progress_pct || 0) > 0 ? 'bg-blue-500' : 'bg-red-500'
                               }`}
                             style={{ width: `${Math.max(Math.min(elGatoDailyProgress.progress_pct || 0, 100), 5)}%` }}
                           ></div>

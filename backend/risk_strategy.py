@@ -101,6 +101,89 @@ class RiskStrategy:
             return self.trades[-1]
             
         return None
+
+    def _parse_timeframe(self, tf: str) -> int:
+        """Convert timeframe string to seconds."""
+        try:
+            if len(tf) < 2:
+                return 300  # default 5m
+            
+            multiplier = int(tf[:-1])
+            unit = tf[-1].lower()
+            
+            if unit == 'm': return multiplier * 60
+            if unit == 'h': return multiplier * 3600
+            if unit == 'd': return multiplier * 86400
+            if unit == 'w': return multiplier * 604800
+            if unit == 'M': return multiplier * 2592000  # ~30 days
+            
+            return 300  # default 5m
+        except:
+            return 300
+
+    def aggregate_candles(self, timeframe: str = "5m") -> list:
+        """
+        Aggregate 5-second candles into larger timeframes.
+        
+        Args:
+            timeframe: String like '1m', '5m', '15m', '1h', '4h', '1d', '1w', '1M'
+            
+        Returns:
+            List of aggregated candles
+        """
+        if not self.candles:
+            return []
+        
+        interval_seconds = self._parse_timeframe(timeframe)
+        
+        # If interval is 5s (or smaller), return raw candles
+        if interval_seconds <= 5:
+            return self.candles
+        
+        aggregated = []
+        current_bucket = None
+        bucket_candles = []
+        
+        for candle in self.candles:
+            # Calculate which bucket this candle belongs to
+            bucket_time = (candle.time // interval_seconds) * interval_seconds
+            
+            if current_bucket is None:
+                current_bucket = bucket_time
+            
+            if bucket_time != current_bucket:
+                # Finalize previous bucket
+                if bucket_candles:
+                    aggregated.append(self._create_aggregated_candle(bucket_candles, current_bucket))
+                
+                # Start new bucket
+                current_bucket = bucket_time
+                bucket_candles = [candle]
+            else:
+                bucket_candles.append(candle)
+        
+        # Finalize last bucket
+        if bucket_candles:
+            aggregated.append(self._create_aggregated_candle(bucket_candles, current_bucket))
+        
+        return aggregated
+
+    def _create_aggregated_candle(self, candles: list, bucket_time: int) -> Candle:
+        """Create a single aggregated candle from multiple candles."""
+        open_price = candles[0].open
+        close_price = candles[-1].close
+        high_price = max(c.high for c in candles)
+        low_price = min(c.low for c in candles)
+        total_volume = sum(c.volume for c in candles)
+        
+        return Candle(
+            time=bucket_time,
+            open=open_price,
+            high=high_price,
+            low=low_price,
+            close=close_price,
+            volume=total_volume
+        )
         
     def _fill_missing_candles(self, from_time: int, to_time: int, last_price: float):
         """Rellena gaps creando velas usando el último precio conocido."""
