@@ -1,18 +1,15 @@
 """
-Adaptadores para enviar órdenes al broker/exchange.
-Soporta modo DEMO (simulado) y REAL (vía ccxt).
+Broker API Handler (CCXT-based)
+Handles trades for:
+- Demo (paper trading simulation)
+- Binance Testnet
+- Binance Real
+- Coinbase
 """
 
-from __future__ import annotations
-
 from typing import Literal, TypedDict
-import time
-import random
 import os
 import ccxt.async_support as ccxt  # Async version of ccxt
-# OANDA temporalmente deshabilitado (librería removida)
-# from oandapyV20 import API
-# from oandapyV20.endpoints.orders import OrderCreate
 
 class OrderPayload(TypedDict):
     symbol: str
@@ -39,7 +36,6 @@ _current_position = {
 
 # Cache para la instancia del exchange
 _exchange_instance = None
-_oanda_client = None
 
 
 async def _get_exchange(mode: Literal["testnet", "real", "coinbase"] = "real"):
@@ -108,39 +104,6 @@ async def _get_exchange(mode: Literal["testnet", "real", "coinbase"] = "real"):
     except Exception as e:
         print(f"[ERROR] Fallo al conectar con {exchange_id}: {e}")
         raise e
-
-
-# OANDA CLIENT DESHABILITADO TEMPORALMENTE
-# def _get_oanda_client(mode: Literal["demo", "real"] = "demo"):
-#     """
-#     Inicializa y retorna cliente OANDA.
-#     """
-#     global _oanda_client
-#     
-#     if _oanda_client:
-#         return _oanda_client
-#     
-#     if mode == "demo":
-#         token = os.getenv("OANDA_DEMO_TOKEN")
-#         account_id = os.getenv("OANDA_DEMO_ACCOUNT_ID")
-#         environment = "practice"
-#         print("[BROKER] Initializing OANDA DEMO mode")
-#     else:
-#         token = os.getenv("OANDA_REAL_TOKEN")
-#         account_id = os.getenv("OANDA_REAL_ACCOUNT_ID")
-#         environment = "live"
-#         print("[BROKER] Initializing OANDA REAL mode")
-#     
-#     if not token or not account_id:
-#         raise ValueError(f"Faltan credenciales OANDA para modo {mode}. Configure OANDA_{mode.upper()}_TOKEN y ACCOUNT_ID.")
-#     
-#     try:
-#         _oanda_client = {"api": API(access_token=token, environment=environment), "account_id": account_id}
-#         print(f"[BROKER] Conectado exitosamente a OANDA ({mode})")
-#         return _oanda_client
-#     except Exception as e:
-#         print(f"[ERROR] Fallo al conectar con OANDA: {e}")
-#         raise e
 
 
 async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real", "coinbase"]) -> dict:
