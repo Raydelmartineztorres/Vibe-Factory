@@ -9,6 +9,7 @@ Handles trades for:
 
 from typing import Literal, TypedDict
 import os
+import random
 import ccxt.async_support as ccxt  # Async version of ccxt
 
 class OrderPayload(TypedDict):
