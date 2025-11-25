@@ -635,9 +635,6 @@ export default function Home() {
         autoScale: true,
         visible: true, // ✅ Ensure price labels are visible
       },
-      watermark: {
-        visible: false, // ❌ Remove TradingView logo
-      },
       crosshair: {
         mode: 1,
         vertLine: {
