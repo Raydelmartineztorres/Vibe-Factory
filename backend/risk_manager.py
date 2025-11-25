@@ -63,7 +63,7 @@ class PyramidEntry:
 class RiskManager:
     """Gestor avanzado de riesgo."""
     
-    def __init__(self, config: AdvancedRiskConfig = None):
+    def __init__(self, config: AdvancedRiskConfig = None, initial_capital: float = 10000.0):
         self.config = config or AdvancedRiskConfig()
         
         # Trailing stops por posición
@@ -73,8 +73,8 @@ class RiskManager:
         self.pyramid_entries: Dict[str, List[PyramidEntry]] = {}
         
         # Drawdown tracking
-        self.peak_balance: float = 0.0
-        self.current_balance: float = 0.0
+        self.peak_balance: float = initial_capital
+        self.current_balance: float = initial_capital
         self.daily_drawdown: float = 0.0
         self.drawdown_state: str = "NORMAL"  # NORMAL/ALERT/CAUTION/DANGER/STOP
         
