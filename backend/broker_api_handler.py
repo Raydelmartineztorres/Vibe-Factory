@@ -158,30 +158,35 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
                 return {"status": "FAILED", "error": f"Insufficient USDT balance (Req: ${cost:.2f}, Avail: ${_simulated_balance['USDT']:.2f})"}
                 
         elif side == "SELL":
-            if _simulated_balance.get(base_currency, 0) >= size:
-                _simulated_balance[base_currency] -= size
-                proceeds = size * current_price
-                _simulated_balance["USDT"] += proceeds
-                _trade_counter += 1
+            # En demo, permitimos "shorting" (balance negativo de BTC)
+            # if _simulated_balance.get(base_currency, 0) >= size: <--- Removed check
+            
+            # Inicializar si no existe
+            if base_currency not in _simulated_balance:
+                _simulated_balance[base_currency] = 0.0
                 
-                # Actualizar posición
-                _current_position["size"] = _simulated_balance[base_currency]
-                _current_position["is_open"] = False # Simplificación: venta cierra posición
-                
-                # Registrar en trade tracker
-                from trade_tracker import get_tracker
-                tracker = get_tracker()
-                tracker.close_trade(f"SIM-{_trade_counter}", current_price, proceeds - (size * _current_position["entry_price"])) # PnL aprox
-                
-                print(f"[SIMULATED] ✅ VENTA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
-                return {
-                    "status": "FILLED",
-                    "id": f"SIM-{_trade_counter}",
-                    "price": current_price,
-                    "details": {"side": "SELL", "amount": size, "proceeds": proceeds, "price": current_price, "symbol": symbol}
-                }
-            else:
-                return {"status": "FAILED", "error": f"Insufficient {base_currency} balance"}
+            _simulated_balance[base_currency] -= size
+            proceeds = size * current_price
+            _simulated_balance["USDT"] += proceeds
+            _trade_counter += 1
+            
+            # Actualizar posición
+            _current_position["size"] = _simulated_balance[base_currency]
+            _current_position["is_open"] = True # Mantenemos abierto si es short
+            
+            # Registrar en trade tracker
+            from trade_tracker import get_tracker
+            tracker = get_tracker()
+            # Para short, el PnL se calcula al cerrar, aquí solo abrimos
+            tracker.open_trade(size, current_price, "SHORT", symbol=symbol)
+            
+            print(f"[SIMULATED] ✅ VENTA (SHORT) ejecutada: {size} {base_currency} @ ${current_price:.2f}")
+            return {
+                "status": "FILLED",
+                "id": f"SIM-{_trade_counter}",
+                "price": current_price,
+                "details": {"side": "SELL", "amount": size, "proceeds": proceeds, "price": current_price, "symbol": symbol}
+            }
 
     # --- MODO REAL (Binance o Coinbase) ---
     elif mode in ["testnet", "real", "coinbase"]:

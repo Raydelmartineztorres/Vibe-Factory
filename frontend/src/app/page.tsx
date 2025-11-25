@@ -611,15 +611,25 @@ export default function Home() {
       height: 550,
       timeScale: {
         timeVisible: true,
-        secondsVisible: false, // Usually seconds clutter the view
+        secondsVisible: false,
         borderColor: '#2B2B43',
         borderVisible: true,
         rightOffset: 12,
-        barSpacing: 12,   // Wider spacing like TV
+        barSpacing: 12,
         minBarSpacing: 2,
         fixLeftEdge: false,
         fixRightEdge: false,
         visible: true,
+        tickMarkFormatter: (time: number, tickMarkType: number, locale: string) => {
+          const date = new Date(time * 1000);
+          // Format based on tickMarkType (Year, Month, Day, Time, TimeWithSeconds)
+          // Simple fallback: HH:mm for intraday
+          return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+        },
+      },
+      localization: {
+        locale: 'es-ES', // Spanish locale for the user
+        dateFormat: 'dd MMM yyyy',
       },
       rightPriceScale: {
         borderColor: '#2B2B43',
