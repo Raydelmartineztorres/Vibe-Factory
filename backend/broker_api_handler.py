@@ -233,32 +233,48 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
 async def get_current_price(symbol: str, mode: Literal["demo", "real"] = "demo") -> float:
     """
     Obtiene el precio actual del símbolo.
-    En demo, simula un precio basado en random walk si no hay conexión real.
+    
+    IMPORTANTE: En modo demo, obtiene precios REALES de Binance (sin autenticación)
+    para que EL GATO aprenda con datos reales del mercado.
+    Solo las operaciones son simuladas, los precios son reales.
     """
-    if mode == "demo":
-        # Simulación con mayor volatilidad para velas realistas
-        # Usamos un precio base y agregamos volatilidad significativa
-        import time
-        
-        # Precio base que oscila lentamente
-        base_price = 87500.0
-        
-        # Agregar ruido intradiario (simulado con tiempo)
-        time_factor = time.time() % 3600  # Ciclo de 1 hora
-        trend = 500 * ((time_factor / 1800) - 1)  # Onda entre -500 y +500
-        
-        # Volatilidad aleatoria mayor
-        volatility = random.uniform(-400, 400)
-        
-        return base_price + trend + volatility
-
     try:
-        exchange = await _get_exchange("real")
+        # Usar Binance público para obtener precios reales (funciona en demo y real)
+        import ccxt.async_support as ccxt
+        
+        # Crear exchange sin credenciales (API pública)
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': 'spot',
+            }
+        })
+        
+        # Obtener ticker actual
         ticker = await exchange.fetch_ticker(symbol)
-        return float(ticker['last'])
+        await exchange.close()
+        
+        price = float(ticker['last'])
+        
+        if mode == "demo":
+            print(f"[DEMO-REAL-PRICE] 📊 BTC/USDT: ${price:.2f} (Binance Live)")
+        
+        return price
+        
     except Exception as e:
-        print(f"[BROKER] Error fetching price: {e}")
-        return 0.0
+        print(f"[PRICE] ⚠️ Error fetching from Binance: {e}")
+        
+        # Fallback: usar precio base realista si falla la conexión
+        # (Evita que el bot se detenga por problemas de red)
+        import time
+        base_price = 87500.0
+        time_factor = time.time() % 3600
+        trend = 500 * ((time_factor / 1800) - 1)
+        volatility = random.uniform(-400, 400)
+        fallback_price = base_price + trend + volatility
+        
+        print(f"[PRICE] 🔄 Usando fallback: ${fallback_price:.2f}")
+        return fallback_price
 
 async def get_balance(mode: Literal["demo", "real"] = "demo"):
     """Retorna el balance (simulado o real)."""
