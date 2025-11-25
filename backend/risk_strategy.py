@@ -5,7 +5,12 @@ Motor de gestión de riesgo y position sizing con auto-trading.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict, Protocol
+from datetime import datetime
+import random
+
 from memory import MarketContext, TradeMemory
+from strategy_profiles import get_strategy_manager
 
 
 @dataclass
@@ -43,29 +48,29 @@ class RiskStrategy:
         self.last_trade_time = 0
         self.last_price = 0.0
         
-        self.memory = TradeMemory()
-        
         # 🧠 INTELIGENCIA ADAPTATIVA
         from ml_predictor import MLPredictor
         from market_timing import MarketTiming
         from sentiment_manager import SentimentManager
-        from risk_manager import RiskManager, AdvancedRiskConfig
         
         # ML y Memory config (por defecto activados)
-        self.ml_enabled = True
+        self.ml_enabled = False
         self.memory_enabled = True
         
         # Inicializar componentes
         self.ml_predictor = MLPredictor()
         self.market_timing = MarketTiming()
         self.sentiment_manager = SentimentManager()
-        self.risk_manager = RiskManager(AdvancedRiskConfig())
+        self.memory = TradeMemory()
         self.last_prediction = None
         self.position_id = 0  # Contador para IDs de posición
         
+        # Sistema de estrategias múltiples
+        self.strategy_manager = get_strategy_manager()
+        print(f"[STRATEGY] ✅ Inicializado con estrategia: {self.strategy_manager.active_strategy}")
+        
     def _fill_missing_candles(self, from_time: int, to_time: int, last_price: float):
         """Rellena gaps creando velas usando el último precio conocido."""
-        import random
         current_time = from_time + 5
         
         while current_time < to_time:

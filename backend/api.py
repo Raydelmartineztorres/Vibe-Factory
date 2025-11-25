@@ -234,6 +234,63 @@ def set_trading_mode(payload: dict):
     print(f"[API] Trading mode switched to: {_trading_mode.upper()}")
     return {"status": "success", "mode": _trading_mode}
 
+# === STRATEGY MANAGEMENT ===
+
+@app.get("/api/strategies")
+def get_strategies():
+    """Retorna todas las estrategias con sus stats."""
+    if _strategy_instance is None:
+        return {"strategies": [], "active_strategy": "BALANCED"}
+    
+    return _strategy_instance.strategy_manager.get_all_stats()
+
+@app.post("/api/strategies/activate")
+def activate_strategy(payload: dict):
+    """Cambia la estrategia activa."""
+    strategy_name = payload.get("strategy")
+    
+    if _strategy_instance is None:
+        return {"status": "error", "message": "Sistema no inicializado"}
+    
+    success = _strategy_instance.strategy_manager.switch_strategy(strategy_name)
+    
+    if success:
+        return {"status": "success", "active_strategy": strategy_name}
+    return {"status": "error", "message": f"No se pudo activar {strategy_name}"}
+
+@app.post("/api/strategies/pause")
+def pause_strategy(payload: dict):
+    """Pausa una estrategia."""
+    strategy_name = payload.get("strategy")
+    
+    if _strategy_instance is None:
+        return {"status": "error", "message": "Sistema no inicializado"}
+    
+    _strategy_instance.strategy_manager.pause_strategy(strategy_name)
+    return {"status": "success", "message": f"{strategy_name} pausada"}
+
+@app.post("/api/strategies/resume")
+def resume_strategy(payload: dict):
+    """Reanuda una estrategia pausada."""
+    strategy_name = payload.get("strategy")
+    
+    if _strategy_instance is None:
+        return {"status": "error", "message": "Sistema no inicializado"}
+    
+    _strategy_instance.strategy_manager.resume_strategy(strategy_name)
+    return {"status": "success", "message": f"{strategy_name} reanudada"}
+
+@app.get("/api/strategies/recommendation")
+def get_strategy_recommendation():
+    """Obtiene recomendación de cuál estrategia usar."""
+    if _strategy_instance is None:
+        return {"recommendation": "Sistema no inicializado"}
+    
+    recommendation = _strategy_instance.strategy_manager.get_recommendation()
+    return {"recommendation": recommendation}
+
+# === END STRATEGY MANAGEMENT ===
+
 @app.get("/api/trades")
 def get_trades():
     """Retorna los trades ejecutados por la estrategia."""
