@@ -623,6 +623,7 @@ export default function Home() {
         minBarSpacing: 4,
         fixLeftEdge: false,
         fixRightEdge: false,
+        visible: true, // ✅ Ensure time labels are visible
       },
       rightPriceScale: {
         borderColor: '#252538',
@@ -632,6 +633,10 @@ export default function Home() {
           bottom: 0.1,
         },
         autoScale: true,
+        visible: true, // ✅ Ensure price labels are visible
+      },
+      watermark: {
+        visible: false, // ❌ Remove TradingView logo
       },
       crosshair: {
         mode: 1,
