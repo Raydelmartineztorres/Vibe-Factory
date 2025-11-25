@@ -803,8 +803,14 @@ class RiskStrategy:
         
         # 🧠 Update Memory
         if self.memory_enabled:
+            # Placeholder for trend_dir and volatility_level, as they are not defined in the provided context.
+            # Assuming they would be calculated or retrieved elsewhere in a full implementation.
+            trend_dir = "neutral" # Example placeholder
+            volatility_level = "medium" # Example placeholder
+
             context = MarketContext(
-                hour=datetime.now().hour,
+                trend=trend_dir,
+                volatility=volatility_level,
                 day_of_week=datetime.now().strftime("%A"),
             )
             self.memory.add_trade(side, price, True, context)
