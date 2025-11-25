@@ -173,6 +173,29 @@ async def startup_event():
     
     # 2. Optimizador (Aprendizaje)
     asyncio.create_task(_optimizer_instance.start_loop())
+    
+    # 3. 🐱 EL GATO Auto-Trading
+    print("[STARTUP] 🐱 Iniciando auto-trading de EL GATO...")
+    global _auto_trading_task
+    from auto_trader import auto_trading_loop
+    
+    def is_trading_enabled():
+        return _trading_enabled
+    
+    _auto_trading_task = asyncio.create_task(
+        auto_trading_loop(_strategy_instance, is_trading_enabled)
+    )
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup al cerrar."""
+    global _auto_trading_task
+    if _auto_trading_task:
+        _auto_trading_task.cancel()
+        try:
+            await _auto_trading_task
+        except asyncio.CancelledError:
+            pass
 
 @app.get("/api/price")
 def get_current_price():
