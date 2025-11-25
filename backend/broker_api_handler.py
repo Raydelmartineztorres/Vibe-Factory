@@ -41,7 +41,7 @@ _exchange_instance = None
 _oanda_client = None
 
 
-async def _get_exchange(mode: Literal["testnet", "real"] = "real"):
+async def _get_exchange(mode: Literal["testnet", "real", "coinbase"] = "real"):
     """
     Inicializa y retorna la instancia del exchange usando ccxt.
     Lee credenciales de variables de entorno según el modo.
@@ -63,7 +63,13 @@ async def _get_exchange(mode: Literal["testnet", "real"] = "real"):
 
     exchange_id = os.getenv("EXCHANGE_ID", "binance")
     
-    if mode == "testnet":
+    if mode == "coinbase":
+        # Coinbase configuration
+        exchange_id = "coinbase"
+        api_key = os.getenv("COINBASE_API_KEY")
+        secret = os.getenv("COINBASE_API_SECRET")
+        print("[BROKER] Initializing COINBASE mode")
+    elif mode == "testnet":
         api_key = os.getenv("BINANCE_TESTNET_KEY") or os.getenv("EXCHANGE_API_KEY")
         secret = os.getenv("BINANCE_TESTNET_SECRET") or os.getenv("EXCHANGE_SECRET")
         print("[BROKER] Initializing in TESTNET mode")
@@ -131,7 +137,7 @@ def _get_oanda_client(mode: Literal["demo", "real"] = "demo"):
         raise e
 
 
-async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real", "oanda_demo", "oanda_real"]) -> dict:
+async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", "real", "oanda_demo", "oanda_real", "coinbase"]) -> dict:
     """
     Envía la orden al broker configurado o la simula.
     """
@@ -207,13 +213,21 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
             else:
                 return {"status": "FAILED", "error": f"Insufficient {base_currency} balance"}
 
-    # --- MODO REAL / TESTNET ---
-    else:
+    # --- MODO REAL (Binance o Coinbase) ---
+    elif mode in ["testnet", "real", "coinbase"]:
         try:
             exchange = await _get_exchange(mode)
             
+            # Determinar el símbolo correcto para el exchange
+            trading_symbol = symbol
+            if mode == "coinbase":
+                # Coinbase usa formato diferente (BTC-USD en vez de BTC/USDT)
+                trading_symbol = symbol.replace("/USDT", "/USD").replace("/", "-")
+            
+            print(f"[{mode.upper()}] Ejecutando orden {side} de {size} {trading_symbol}")
+            
             # Normalizar símbolo para ccxt
-            market = exchange.market(symbol)
+            market = exchange.market(trading_symbol)
             symbol_ccxt = market['symbol']
             
             # Ejecutar orden de mercado

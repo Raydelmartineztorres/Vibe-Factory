@@ -1113,15 +1113,17 @@ export default function Home() {
                       }
                     }}
                     className={`w-full px-3 py-2 border rounded font-mono text-sm focus:outline-none cursor-pointer ${tradingMode === 'real' ? 'bg-red-900/30 border-red-500/50 text-red-400' :
-                      tradingMode === 'testnet' ? 'bg-yellow-900/30 border-yellow-500/50 text-yellow-400' :
-                        tradingMode === 'oanda_demo' ? 'bg-blue-900/30 border-blue-500/50 text-blue-400' :
-                          tradingMode === 'oanda_real' ? 'bg-orange-900/30 border-orange-500/50 text-orange-400' :
-                            'bg-black/30 border-white/10 text-white'
+                        tradingMode === 'testnet' ? 'bg-yellow-900/30 border-yellow-500/50 text-yellow-400' :
+                          tradingMode === 'oanda_demo' ? 'bg-blue-900/30 border-blue-500/50 text-blue-400' :
+                            tradingMode === 'oanda_real' ? 'bg-orange-900/30 border-orange-500/50 text-orange-400' :
+                              tradingMode === 'coinbase' ? 'bg-cyan-900/30 border-cyan-500/50 text-cyan-400' :
+                                'bg-black/30 border-white/10 text-white'
                       }`}
                   >
                     <option value="demo">📝 Paper Trading (Internal Sim)</option>
                     <option value="testnet">🧪 Binance Testnet (Sandbox)</option>
                     <option value="real">🚀 Binance Real (Mainnet)</option>
+                    <option value="coinbase">🪙 Coinbase (BTC, ETH, etc.)</option>
                     <option value="oanda_demo">🦊 OANDA Demo (Forex EUR/USD)</option>
                     <option value="oanda_real">🦊 OANDA Real (Forex EUR/USD)</option>
                   </select>
