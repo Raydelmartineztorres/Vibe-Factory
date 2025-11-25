@@ -236,12 +236,21 @@ async def get_current_price(symbol: str, mode: Literal["demo", "real"] = "demo")
     En demo, simula un precio basado en random walk si no hay conexión real.
     """
     if mode == "demo":
-        # Simulación simple para demo si no hay exchange conectado
-        # En producción idealmente conectaríamos a un feed público
-        # Por ahora, usar random walk alrededor de un precio base o el último conocido
-        base_price = 90000.0
-        variation = random.uniform(-50, 50)
-        return base_price + variation
+        # Simulación con mayor volatilidad para velas realistas
+        # Usamos un precio base y agregamos volatilidad significativa
+        import time
+        
+        # Precio base que oscila lentamente
+        base_price = 87500.0
+        
+        # Agregar ruido intradiario (simulado con tiempo)
+        time_factor = time.time() % 3600  # Ciclo de 1 hora
+        trend = 500 * ((time_factor / 1800) - 1)  # Onda entre -500 y +500
+        
+        # Volatilidad aleatoria mayor
+        volatility = random.uniform(-400, 400)
+        
+        return base_price + trend + volatility
 
     try:
         exchange = await _get_exchange("real")
