@@ -256,27 +256,6 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
     else:
         return {"status": "FAILED", "error": f"Modo '{mode}' no soportado"}
 
-            print(f"[REAL] Enviando orden {side} {size} {symbol} a {exchange.id}...")
-            
-            order = await exchange.create_order(
-                symbol=symbol,
-                type='market',
-                side=side.lower(), # ccxt usa 'buy'/'sell' en minusculas
-                amount=size
-            )
-            
-            print(f"[REAL] ✅ Orden ejecutada: {order['id']}")
-            return {
-                "status": "FILLED",
-                "id": str(order['id']),
-                "price": order.get('price') or order.get('average') or 0.0, # Precio real de ejecución
-                "details": order
-            }
-            
-        except Exception as e:
-            print(f"[REAL] ❌ Error ejecutando orden: {e}")
-            return {"status": "ERROR", "message": str(e)}
-
 
 async def get_balance(mode: Literal["demo", "real"] = "demo"):
     """Retorna el balance (simulado o real)."""
