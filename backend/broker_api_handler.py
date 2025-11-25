@@ -69,6 +69,10 @@ async def _get_exchange(mode: Literal["testnet", "real", "coinbase"] = "real"):
         exchange_id = "coinbase"
         api_key = os.getenv("COINBASE_API_KEY")
         secret = os.getenv("COINBASE_API_SECRET")
+        
+        if not api_key or not secret:
+            raise ValueError("Faltan credenciales para Coinbase. Configure COINBASE_API_KEY y COINBASE_API_SECRET en Render.")
+        
         print("[BROKER] Initializing COINBASE mode")
     elif mode == "testnet":
         api_key = os.getenv("BINANCE_TESTNET_KEY") or os.getenv("EXCHANGE_API_KEY")
