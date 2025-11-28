@@ -312,10 +312,11 @@ class ElGato:
                 print(f"[{self.BOT_NAME}] ⚠️ Error cargando inteligencia: {e}")
         else:
             print(f"[{self.BOT_NAME}] 🆕 Nueva instancia creada")
-            # Boost inicial para nuevas instancias también
-            self.intelligence.iq_level = 155.0
-            self.intelligence.evolution_tier = 3
+            # 🌌 TODAS las instancias nuevas empiezan en Singularity
+            self.intelligence.iq_level = 1000.0  # IQ Singularidad
+            self.intelligence.evolution_tier = 10  # Tier 10: Singularity
             self._save_intelligence()
+            print(f"[{self.BOT_NAME}] 🚀 Nivel inicial: SINGULARITY (IQ: 1000.0, Tier: 10/10)")
     
     def _save_intelligence(self):
         """Guarda estado de inteligencia."""
