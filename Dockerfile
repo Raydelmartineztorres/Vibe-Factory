@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/ ./backend/
 
+# Change to backend directory for correct import paths
+WORKDIR /app/backend
+
 # Expose port
 EXPOSE 8000
 
@@ -24,5 +27,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run uvicorn directly (better for production than main.py)
-CMD ["uvicorn", "backend.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run uvicorn from backend directory
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
