@@ -627,29 +627,17 @@ export default function Home() {
         secondsVisible: false,
         borderColor: '#2B2B43',
         borderVisible: true,
-        rightOffset: 15,          // More space on right
-        barSpacing: 15,            // Wider spacing between candles
-        minBarSpacing: 4,          // Minimum spacing
+        rightOffset: 12,
+        barSpacing: 12,
+        minBarSpacing: 2,
         fixLeftEdge: false,
         fixRightEdge: false,
         visible: true,
-        tickMarkFormatter: (time: number) => {
+        tickMarkFormatter: (time: number, tickMarkType: number, locale: string) => {
           const date = new Date(time * 1000);
-          const now = new Date();
-          const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-          // Si es hoy, mostrar solo hora
-          if (diffDays === 0) {
-            return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-          }
-          // Si es esta semana, mostrar día y hora
-          else if (diffDays < 7) {
-            return date.toLocaleDateString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-          }
-          // Si es más antiguo, mostrar fecha completa
-          else {
-            return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-          }
+          // Format based on tickMarkType (Year, Month, Day, Time, TimeWithSeconds)
+          // Simple fallback: HH:mm for intraday
+          return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
         },
       },
       localization: {
@@ -660,11 +648,11 @@ export default function Home() {
         borderColor: '#2B2B43',
         borderVisible: true,
         scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
+          top: 0.2,
+          bottom: 0.2,
         },
         mode: 1,
-        autoScale: true,  // ACTIVAR AUTOESCALA
+        autoScale: false,
         visible: true,
         alignLabels: true,
       },
@@ -698,31 +686,13 @@ export default function Home() {
 
     chartRef.current = chart;
 
-    // Fix: Ajustar para alta resolución (retina displays)
-    chart.applyOptions({
-      width: chartContainerRef.current.clientWidth,
-      height: 550,
-    });
-
-    // Resize observer para ajustar el chart cuando cambie el tamaño del contenedor
-    const resizeObserver = new ResizeObserver(entries => {
-      if (entries.length === 0 || entries[0].target !== chartContainerRef.current) return;
-      const newWidth = entries[0].contentRect.width;
-      chart.applyOptions({ width: newWidth });
-    });
-
-    resizeObserver.observe(chartContainerRef.current);
-
-    // 🕯️ Standard TradingView Candlestick Colors - Enhanced
+    // 🕯️ Standard TradingView Candlestick Colors
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',        // Slightly brighter green
-      downColor: '#ef5350',      // Slightly brighter red  
-      borderVisible: true,       // Show borders for clarity
-      borderUpColor: '#26a69a',
-      borderDownColor: '#ef5350',
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-      wickVisible: true,
+      upColor: '#089981',        // TV Green
+      downColor: '#F23645',      // TV Red
+      borderVisible: false,      // TV usually doesn't show borders if filled
+      wickUpColor: '#089981',
+      wickDownColor: '#F23645',
       priceScaleId: 'right',
     });
 
@@ -803,11 +773,11 @@ export default function Home() {
         chart.applyOptions({ width: chartContainerRef.current.clientWidth });
       }
     };
+
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      resizeObserver.disconnect();
       chart.remove();
     };
   }, []);
@@ -1138,8 +1108,8 @@ export default function Home() {
                   key={tf.value}
                   onClick={() => setSelectedTimeframe(tf.value)}
                   className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${selectedTimeframe === tf.value
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50'
+                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
                     }`}
                 >
                   {tf.label}
@@ -1658,53 +1628,53 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* ML Prediction Panel - Compact */}
-                <div className="mb-3 bg-black/20 rounded-lg p-3 border border-purple-500/20">
-                  <h3 className="text-xs font-bold text-purple-300 mb-2 flex items-center gap-2">
-                    <span>🤖</span> Predicción ML
-                    {mlPrediction?.is_trained && <span className="text-[9px] bg-green-900/50 text-green-300 px-1.5 py-0.5 rounded-full border border-green-500/30">Trained</span>}
+                {/* ML Prediction Panel */}
+                <div className="mb-4 bg-black/20 rounded-lg p-4 border border-purple-500/20">
+                  <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                    <span>🤖</span> Predicción en Tiempo Real
+                    {mlPrediction?.is_trained && <span className="text-[10px] bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full border border-green-500/30">Modelo Entrenado</span>}
                   </h3>
 
                   {mlPrediction ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
-                        <div className="text-gray-400 text-[10px] mb-0.5">Señal</div>
-                        <div className={`text-lg font-bold ${mlPrediction.signal === 'BUY' ? 'text-green-400' :
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
+                        <div className="text-gray-400 text-xs mb-1">Señal ML</div>
+                        <div className={`text-xl font-bold ${mlPrediction.signal === 'BUY' ? 'text-green-400' :
                           mlPrediction.signal === 'SELL' ? 'text-red-400' :
                             'text-gray-400'
                           }`}>
                           {mlPrediction.signal}
                         </div>
                       </div>
-                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
-                        <div className="text-gray-400 text-[10px] mb-0.5">Precio</div>
-                        <div className="text-lg font-mono text-blue-300">
-                          ${mlPrediction.predicted_price?.toFixed(0) || '---'}
+                      <div className="bg-black/30 p-3 rounded-lg text-center border border-white/5">
+                        <div className="text-gray-400 text-xs mb-1">Precio Predicho</div>
+                        <div className="text-xl font-mono text-blue-300">
+                          ${mlPrediction.predicted_price?.toFixed(2) || '---'}
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center text-gray-500 py-1 text-xs">
-                      Cargando...
+                    <div className="text-center text-gray-500 py-2 text-sm">
+                      Cargando modelo...
                     </div>
                   )}
                 </div>
 
                 {memoryStats && (
-                  <div className="px-2 py-1 bg-purple-500/20 rounded-full border border-purple-500/30 mb-3">
-                    <span className="text-[10px] text-purple-300 font-mono">
+                  <div className="px-3 py-1 bg-purple-500/20 rounded-full border border-purple-500/30">
+                    <span className="text-xs text-purple-300 font-mono">
                       {memoryStats.total_trades || 0} Experiences
                     </span>
                   </div>
                 )}
 
 
-                {/* Risk Manager Panel - Compact */}
-                <div className="mb-3 bg-black/20 rounded-lg p-3 border border-red-500/20">
-                  <h3 className="text-xs font-bold text-red-300 mb-2 flex items-center gap-2">
-                    <span>🛡️</span> Risk Manager
+                {/* Risk Manager Panel */}
+                <div className="mb-4 bg-black/20 rounded-lg p-4 border border-red-500/20">
+                  <h3 className="text-sm font-bold text-red-300 mb-3 flex items-center gap-2">
+                    <span>🛡️</span> Risk Manager Shield
                     {riskStats && (
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${riskStats.drawdown_state === 'NORMAL' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${riskStats.drawdown_state === 'NORMAL' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
                         riskStats.drawdown_state === 'STOP' ? 'bg-red-900/50 text-red-300 border-red-500/30' :
                           'bg-yellow-900/50 text-yellow-300 border-yellow-500/30'
                         }`}>
@@ -1714,36 +1684,36 @@ export default function Home() {
                   </h3>
 
                   {riskStats ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <div className="bg-black/30 p-1.5 rounded border border-white/5 text-center">
-                        <div className="text-[9px] text-gray-400">Trailing</div>
-                        <div className="text-base font-mono font-bold text-blue-300">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Trailing Stops</div>
+                        <div className="text-lg font-mono font-bold text-blue-300">
                           {riskStats.trailing_stops_active}
                         </div>
                       </div>
-                      <div className="bg-black/30 p-1.5 rounded border border-white/5 text-center">
-                        <div className="text-[9px] text-gray-400">Pyramids</div>
-                        <div className="text-base font-mono font-bold text-purple-300">
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Pyramids</div>
+                        <div className="text-lg font-mono font-bold text-purple-300">
                           {riskStats.pyramid_positions}
                         </div>
                       </div>
-                      <div className="bg-black/30 p-1.5 rounded border border-white/5 text-center">
-                        <div className="text-[9px] text-gray-400">Drawdown</div>
-                        <div className={`text-base font-mono font-bold ${riskStats.daily_drawdown > 5 ? 'text-red-400' : 'text-green-400'
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Drawdown</div>
+                        <div className={`text-lg font-mono font-bold ${riskStats.daily_drawdown > 5 ? 'text-red-400' : 'text-green-400'
                           }`}>
                           {riskStats.daily_drawdown}%
                         </div>
                       </div>
-                      <div className="bg-black/30 p-1.5 rounded border border-white/5 text-center">
-                        <div className="text-[9px] text-gray-400">Peak</div>
-                        <div className="text-base font-mono font-bold text-gray-300">
-                          ${Math.round(riskStats.peak_balance)}
+                      <div className="bg-black/30 p-2 rounded border border-white/5 text-center">
+                        <div className="text-[10px] text-gray-400">Peak Balance</div>
+                        <div className="text-lg font-mono font-bold text-gray-300">
+                          ${riskStats.peak_balance}
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center text-gray-500 py-1 text-xs">
-                      Cargando...
+                    <div className="text-center text-gray-500 py-2 text-sm">
+                      Cargando stats...
                     </div>
                   )}
                 </div>
