@@ -21,7 +21,7 @@ FRONTEND_PID=$!
 
 echo "⏳ Esperando a que cargue..."
 sleep 5
-open "http://localhost:3000"
+# open "http://localhost:3000"
 
 # Mantener script corriendo
 wait $FRONTEND_PID

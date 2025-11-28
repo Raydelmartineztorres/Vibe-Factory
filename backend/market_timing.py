@@ -80,14 +80,14 @@ class MarketTiming:
                 name="PEAK_HOURS",
                 is_peak=True,
                 avg_volume=avg_vol,
-                aggressiveness=1.3  # Más agresivo en horas pico
+                aggressiveness=1.5  # 🔥 MAX AGGRESSIVENESS
             )
         else:
             return MarketSession(
                 name="OFF_HOURS",
                 is_peak=False,
                 avg_volume=avg_vol,
-                aggressiveness=0.7  # Más conservador en horas muertas
+                aggressiveness=1.0  # 🔥 ALWAYS ACTIVE (was 0.7)
             )
             
     def adjust_parameters(self, base_params: dict) -> dict:
@@ -105,15 +105,15 @@ class MarketTiming:
         
         # Ajustar umbrales según agresividad
         if session.is_peak:
-            # En horas pico: más permisivo con RSI, menor umbral de volumen
-            adjusted['rsi_buy_threshold'] = adjusted.get('rsi_buy_threshold', 70) + 5
-            adjusted['rsi_sell_threshold'] = adjusted.get('rsi_sell_threshold', 30) - 5
-            adjusted['volume_multiplier'] = adjusted.get('volume_multiplier', 0.5) * 0.8
+            # En horas pico: MUY permisivo
+            adjusted['rsi_buy_threshold'] = adjusted.get('rsi_buy_threshold', 70) + 8   # Buy even at 78
+            adjusted['rsi_sell_threshold'] = adjusted.get('rsi_sell_threshold', 30) - 8 # Sell even at 22
+            adjusted['volume_multiplier'] = adjusted.get('volume_multiplier', 0.5) * 0.6 # Require less volume
         else:
-            # Fuera de horas pico: más estricto
-            adjusted['rsi_buy_threshold'] = adjusted.get('rsi_buy_threshold', 70) - 5
-            adjusted['rsi_sell_threshold'] = adjusted.get('rsi_sell_threshold', 30) + 5
-            adjusted['volume_multiplier'] = adjusted.get('volume_multiplier', 0.5) * 1.2
+            # Fuera de horas pico: Moderado (antes estricto)
+            adjusted['rsi_buy_threshold'] = adjusted.get('rsi_buy_threshold', 70) - 2
+            adjusted['rsi_sell_threshold'] = adjusted.get('rsi_sell_threshold', 30) + 2
+            adjusted['volume_multiplier'] = adjusted.get('volume_multiplier', 0.5) * 1.0 # Standard volume
             
         return adjusted
         

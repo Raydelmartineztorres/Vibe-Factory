@@ -1,0 +1,23 @@
+services:
+  # Backend API
+  - type: web
+    name: vibe-factory-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "cd backend && uvicorn api:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: TRADING_MODE
+        value: demo
+      - key: AUTH_USERNAME
+        value: admin
+      - key: AUTH_PASSWORD
+        generateValue: true
+      - key: BINANCE_TESTNET_KEY
+        sync: false
+      - key: BINANCE_TESTNET_SECRET
+        sync: false
+    healthCheckPath: /health

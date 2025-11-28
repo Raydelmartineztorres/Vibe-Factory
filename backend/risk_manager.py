@@ -19,8 +19,8 @@ class AdvancedRiskConfig:
     
     # Trailing Stop-Loss
     trailing_enabled: bool = True
-    trailing_atr_multiplier: float = 1.5
-    trailing_activation_threshold: float = 0.003  # 0.3% profit para activar
+    trailing_atr_multiplier: float = 1.0  # 🔥 Tighter stops (was 1.5)
+    trailing_activation_threshold: float = 0.001  # 🔥 Activate at 0.1% profit (was 0.3%)
     
     # Position Sizing
     base_position_size: float = 0.001
@@ -38,6 +38,11 @@ class AdvancedRiskConfig:
     max_drawdown_caution: float = 0.04  # 4%
     max_drawdown_danger: float = 0.06   # 6%
     max_drawdown_stop: float = 0.10     # 10%
+    
+    # 🆕 Trading Fees (Exchange Commissions)
+    maker_fee: float = 0.001  # 0.1% (Binance maker fee)
+    taker_fee: float = 0.001  # 0.1% (Binance taker fee - más común)
+    min_profit_multiplier: float = 1.1  # 🔥 AGGRESSIVE: Ganancia mínima = fees × 1.1
 
 
 @dataclass
@@ -179,26 +184,30 @@ class RiskManager:
     
     # ========== POSITION SIZING ==========
     
-    def calculate_position_size(self, 
-                               ml_signal: str = "NEUTRAL",
-                               memory_winrate: float = 0.5,
-                               pattern_detected: bool = False,
-                               volatility_ratio: float = 1.0,
-                               multiple_confirmations: bool = False) -> float:
+    def calculate_position_size(self, ml_signal: str, memory_winrate: float, 
+                              pattern_detected: bool, volatility_ratio: float,
+                              multiple_confirmations: bool, singularity_multiplier: float = 1.0) -> float:
         """
-        Calcula el tamaño de posición dinámicamente basado en múltiples factores.
+        Calcula el tamaño de posición óptimo basado en factores de riesgo.
         
         Args:
-            ml_signal: "BUY", "SELL", o "NEUTRAL"
-            memory_winrate: Win rate histórico en contexto actual (0.0-1.0)
+            ml_signal: Señal del modelo ML (BUY/SELL/HOLD)
+            memory_winrate: Win rate histórico en contexto similar (0.0-1.0)
             pattern_detected: Si se detectó un patrón de vela
             volatility_ratio: Ratio de volatilidad actual vs promedio
             multiple_confirmations: Si hay múltiples confirmaciones técnicas
+            singularity_multiplier: Factor de escala basado en inteligencia (default 1.0)
         
         Returns:
             Tamaño de posición ajustado
         """
         base_size = self.config.base_position_size
+        
+        # 🧠 SINGULARITY SCALING: Aumentar límite máximo basado en inteligencia
+        # Risk = Base * sqrt(Multiplier) para crecimiento seguro pero potente
+        # Ejemplo: Multiplier 10x -> Risk 3.16x
+        import math
+        scaled_max_size = self.config.max_position_size * math.sqrt(singularity_multiplier)
         
         # === CONFIDENCE BOOSTS ===
         confidence_boost = 0.0
@@ -243,18 +252,23 @@ class RiskManager:
             risk_penalty += 0.50
         elif self.drawdown_state == "DANGER":
             risk_penalty += 0.70
+            
+        # === FINAL CALCULATION ===
+        # Size = Base * (1 + Boosts - Penalties)
+        total_adjustment = 1.0 + confidence_boost - risk_penalty
         
-        # === CALCULATE FINAL SIZE ===
-        multiplier = 1.0 + confidence_boost - risk_penalty
-        multiplier = max(multiplier, 0.3)  # Mínimo 30% del base
+        # Ensure adjustment is positive
+        total_adjustment = max(0.1, total_adjustment)
         
-        final_size = base_size * multiplier
+        final_size = base_size * total_adjustment
         
-        # Clamp to limits
-        final_size = max(self.config.min_position_size, 
-                        min(final_size, self.config.max_position_size))
+        # Apply limits (usando scaled_max_size)
+        final_size = max(self.config.min_position_size, min(final_size, scaled_max_size))
         
-        print(f"[RISK] Position Size: {final_size:.6f} BTC (base: {base_size:.6f}, multiplier: {multiplier:.2f}x)")
+        # Round to 4 decimals
+        final_size = round(final_size, 4)
+        
+        print(f"[RISK] Position Size: {final_size:.6f} BTC (base: {base_size:.6f}, multiplier: {total_adjustment:.2f}x)")
         print(f"  └─ Confidence: +{confidence_boost*100:.1f}% | Risk: -{risk_penalty*100:.1f}%")
         
         return final_size
@@ -431,4 +445,55 @@ class RiskManager:
             "daily_drawdown": round(self.daily_drawdown * 100, 2),
             "peak_balance": round(self.peak_balance, 2),
             "current_balance": round(self.current_balance, 2)
+        }
+    
+    def calculate_trade_cost(self, entry_price: float, size: float, exit_price: float = None) -> dict:
+        """
+        Calcula el costo total de un trade incluyendo fees de entrada y salida.
+        
+        Args:
+            entry_price: Precio de entrada
+            size: Tamaño de la posición
+            exit_price: Precio de salida (opcional, usa entry_price si no se proporciona)
+        
+        Returns:
+            dict con:
+                - entry_fee: Fee de entrada en USD
+                - exit_fee: Fee de salida en USD  
+                - total_fee: Fee total en USD
+                - breakeven_price_long: Precio para breakeven en LONG
+                - breakeven_price_short: Precio para breakeven en SHORT
+                - min_profit_required: Ganancia mínima para cubrir fees × 2
+        """
+        if exit_price is None:
+            exit_price = entry_price
+            
+        # Calcular fees (usamos taker_fee porque es más común)
+        entry_value = entry_price * size
+        entry_fee = entry_value * self.config.taker_fee
+        
+        exit_value = exit_price * size
+        exit_fee = exit_value * self.config.taker_fee
+        
+        total_fee = entry_fee + exit_fee
+        
+        # Calcular breakeven prices (precio donde PnL = -fees)
+        # Para LONG: necesitamos que (exit - entry) * size > total_fee
+        # breakeven = entry + (total_fee / size)
+        breakeven_long = entry_price + (total_fee / size)
+        
+        # Para SHORT: necesitamos que (entry - exit) * size > total_fee
+        # breakeven = entry - (total_fee / size)  
+        breakeven_short = entry_price - (total_fee / size)
+        
+        # Ganancia mínima requerida (fees × multiplicador)
+        min_profit_required = total_fee * self.config.min_profit_multiplier
+        
+        return {
+            "entry_fee": round(entry_fee, 2),
+            "exit_fee": round(exit_fee, 2),
+            "total_fee": round(total_fee, 2),
+            "breakeven_price_long": round(breakeven_long, 2),
+            "breakeven_price_short": round(breakeven_short, 2),
+            "min_profit_required": round(min_profit_required, 2)
         }

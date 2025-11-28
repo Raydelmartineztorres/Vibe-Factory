@@ -37,7 +37,7 @@ class TradeTracker:
             return 1
         return max(t.get("id", 0) for t in self.trades) + 1
     
-    def open_trade(self, size: float, entry_price: float, side: str = "LONG", symbol: str = "BTC/USDT") -> Dict:
+    def open_trade(self, size: float, entry_price: float, side: str = "LONG", symbol: str = "BTC/USDT", trade_id: str | int | None = None, source: str = "manual") -> Dict:
         """
         Abre un nuevo trade.
         
@@ -46,22 +46,31 @@ class TradeTracker:
             entry_price: Precio de entrada
             side: LONG o SHORT
             symbol: Símbolo del activo (ej: BTC/USDT)
+            trade_id: ID opcional para el trade
+            source: "manual" (👤 usuario) o "auto" (🐱 EL GATO)
             
         Returns:
             Diccionario del trade creado
         """
         trade = {
-            "id": self._generate_id(),
+            "id": trade_id if trade_id is not None else self._generate_id(),
             "symbol": symbol,
             "size": size,
             "entry_price": entry_price,
             "side": side,
             "opened_at": datetime.now().isoformat(),
-            "status": "OPEN"
+            "status": "OPEN",
+            "source": source,  # 👤 manual or 🐱 auto
+            # 🆕 Fee tracking
+            "entry_fee": 0.0,
+            "exit_fee": 0.0,
+            "total_fees": 0.0,
+            "net_pnl": 0.0
         }
         self.trades.append(trade)
         self._save()
-        print(f"[TRACKER] ✅ Trade #{trade['id']} abierto: {size} {symbol} @ ${entry_price:,.2f} ({side})")
+        icon = "🐱" if source == "auto" else "👤"
+        print(f"[TRACKER] ✅ {icon} Trade #{trade['id']} abierto: {size} {symbol} @ ${entry_price:,.2f} ({side})")
         return trade
     
     def close_trade(self, trade_id: int, exit_price: float) -> Optional[Dict]:
@@ -92,6 +101,49 @@ class TradeTracker:
                 return trade
         
         return None
+
+    def cleanup_duplicates(self):
+        """
+        Detecta y cierra trades duplicados para el mismo símbolo.
+        Mantiene solo el trade más reciente por símbolo.
+        """
+        open_trades = {}  # {symbol: [trade1, trade2]}
+        
+        # Agrupar trades abiertos
+        for trade in self.trades:
+            if trade["status"] == "OPEN":
+                symbol = trade["symbol"]
+                if symbol not in open_trades:
+                    open_trades[symbol] = []
+                open_trades[symbol].append(trade)
+        
+        # Verificar duplicados
+        cleaned_count = 0
+        for symbol, trades in open_trades.items():
+            if len(trades) > 1:
+                # Ordenar por fecha (más reciente al final)
+                # Asumimos que el orden en lista es cronológico, pero por si acaso
+                # trade['opened_at'] es ISO string, se ordena bien lexicográficamente
+                trades.sort(key=lambda x: x["opened_at"])
+                
+                # Mantener el último, cerrar los anteriores
+                to_close = trades[:-1]
+                keep = trades[-1]
+                
+                print(f"[TRACKER] ⚠️ Detectados {len(trades)} trades abiertos para {symbol}. Manteniendo #{keep['id']}.")
+                
+                for t in to_close:
+                    print(f"[TRACKER] 🧹 Limpiando trade duplicado #{t['id']}")
+                    t["status"] = "CLOSED"
+                    t["exit_price"] = t["entry_price"]  # Break even
+                    t["closed_at"] = datetime.now().isoformat()
+                    t["pnl"] = 0.0
+                    t["notes"] = "Auto-closed duplicate"
+                    cleaned_count += 1
+        
+        if cleaned_count > 0:
+            self._save()
+            print(f"[TRACKER] ✅ Limpieza completada: {cleaned_count} trades duplicados cerrados.")
     
     def reverse_trade(self, trade_id: int) -> Optional[Dict]:
         """

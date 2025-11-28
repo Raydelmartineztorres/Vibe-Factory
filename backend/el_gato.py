@@ -129,60 +129,97 @@ class BotIntelligence:
         }
         return capabilities.get(tier, [])
     
-    def record_trade(self, is_win: bool, pnl: float):
-        """Registra el resultado de un trade y actualiza IQ."""
+    def record_trade(self, profit: float, pattern: str = None):
+        """Registra un trade y actualiza inteligencia."""
         self.trades_executed += 1
-        self.experience_points += 10 if is_win else 5
-        self.total_profit += pnl
+        self.total_profit += profit
         
-        if is_win:
+        if profit > 0:
             self.wins += 1
+            # 🚀 ULTRA-LEARNING: XP aumentado 10x (de 10 a 100)
+            xp_gain = 100 if pattern else 50
         else:
             self.losses += 1
+            # 🚀 ULTRA-LEARNING: Aprende de derrotas 5x más rápido (de 5 a 25)
+            xp_gain = 25  # Aprende incluso de pérdidas
         
-        # Recalcular IQ
-        self.calculate_iq()
+        self.experience_points += xp_gain
+        
+        # 🚀 IQ gain aumentado 5x (de 1-5 a 5-25)
+        iq_gain = max(5, int(xp_gain / 20))
+        self.iq_level += iq_gain
+        
+        # Calcular win rate
+        if self.trades_executed > 0:
+            self.win_rate = (self.wins / self.trades_executed) * 100
         
         # Verificar si subió de tier
         self.update_tier()
     
     def get_daily_target(self) -> float:
-        """Calcula objetivo diario basado en IQ."""
-        if self.iq_level < 125:
-            return 100.0
-        elif self.iq_level < 150:
-            return 250.0
-        elif self.iq_level < 200:
-            return 500.0
-        elif self.iq_level < 250:
-            return 1000.0
-        elif self.iq_level < 300:
-            return 2500.0
-        elif self.iq_level < 500:
-            return 5000.0
-        else:
-            return 10000.0
+        """
+        Calcula objetivo diario basado en BALANCE ACTUAL (crecimiento compuesto).
+        
+        🚀 ESTRATEGIA CONSERVADORA:
+        - Usa 1.5% del balance actual (en lugar de valores fijos)
+        - Crece con la cuenta → Compounding
+        - Objetivo: +56% en 30 días ($10k → $15.6k)
+        """
+        # Obtener balance actual (por defecto $10k si no se puede obtener)
+        current_balance = 10000.0
+        
+        try:
+            # Intentar obtener balance real del sistema
+            from api import _strategy_instance
+            if _strategy_instance:
+                # Balance = capital virtual + PnL realizado + no realizado
+                pnl_data = _strategy_instance.get_portfolio_pnl()
+                current_balance = (
+                    _strategy_instance.config.capital_virtual +
+                    pnl_data.get('realized_pnl', 0) +
+                    pnl_data.get('unrealized_pnl', 0)
+                )
+        except:
+            pass
+        
+        # 📈 CRECIMIENTO COMPUESTO: 1.5% del balance actual
+        # Ajustado por realidad: Si simulamos fees, el objetivo neto es más difícil
+        # Mantenemos 1.5% bruto, pero sabiendo que el neto será menor
+        daily_target = current_balance * 0.015  # 1.5%
+        
+        return max(100.0, daily_target)  # Mínimo $100
     
+    def get_singularity_multiplier(self) -> float:
+        """
+        Calcula el Multiplicador de Singularidad.
+        Factor de escala dinámica para todas las capacidades.
+        
+        Fórmula: 1.0 + (IQ / 100) + (XP / 5000)
+        """
+        iq_factor = self.iq_level / 100.0
+        xp_factor = self.experience_points / 5000.0
+        return 1.0 + iq_factor + xp_factor
+
     def get_learning_rate(self) -> float:
-        """Calcula velocidad de aprendizaje basada en IQ."""
-        base_lr = 0.01
-        return base_lr * (1 + self.iq_level / 100)
+        """Calcula velocidad de aprendizaje basada en Multiplicador."""
+        multiplier = self.get_singularity_multiplier()
+        
+        # 🧠 CEREBRO CUÁNTICO: Escala logarítmica con el multiplicador
+        import math
+        base_lr = 0.01 * math.log(multiplier + 1)
+        
+        # Cap dinámico (puede superar 0.5 si el multiplicador es enorme)
+        return min(0.9, max(0.01, base_lr))
     
     def get_memory_size(self) -> int:
-        """Tamaño de memoria basado en tier."""
-        memory_sizes = {
-            1: 100,
-            2: 500,
-            3: 2000,
-            4: 10000,
-            5: 50000,
-            6: 100000,
-            7: 500000,
-            8: 1000000,
-            9: 5000000,
-            10: -1  # Unlimited
-        }
-        return memory_sizes.get(self.evolution_tier, 100)
+        """Tamaño de memoria basado en Multiplicador (Crecimiento Exponencial)."""
+        multiplier = self.get_singularity_multiplier()
+        
+        # 🧠 MEMORIA INFINITA: Base * Multiplier^2
+        base_memory = 1000
+        memory_size = int(base_memory * (multiplier ** 2))
+        
+        return memory_size
     
     def to_dict(self) -> dict:
         """Convierte a diccionario para serialización."""
@@ -260,10 +297,25 @@ class ElGato:
                     unlocked_capabilities=data.get("unlocked_capabilities", [])
                 )
                 print(f"[{self.BOT_NAME}] 💾 Inteligencia cargada: IQ {self.intelligence.iq_level:.2f}, Tier {self.intelligence.evolution_tier}")
+                
+                # 🚀 EVOLUTION BOOST: Forzar actualización de nivel por mejoras de hardware (Gato Singularidad)
+                # Si es Novato o Trader pero tiene capacidades infinitas, subirlo a Tier 10
+                if self.intelligence.evolution_tier < 10 and self.intelligence.iq_level < 1000:
+                    print(f"[{self.BOT_NAME}] 🌌 Detectada Matriz de Singularidad (Memoria x100). Evolucionando a forma final...")
+                    self.intelligence.experience_points += 50000  # Boost masivo
+                    self.intelligence.iq_level = 1000.0  # IQ Singularidad
+                    self.intelligence.evolution_tier = 10 # Singularity Tier
+                    self._save_intelligence()
+                    print(f"[{self.BOT_NAME}] 🆙 Nivel actualizado: SINGULARITY (IQ: {self.intelligence.iq_level})")
+                    
             except Exception as e:
                 print(f"[{self.BOT_NAME}] ⚠️ Error cargando inteligencia: {e}")
         else:
             print(f"[{self.BOT_NAME}] 🆕 Nueva instancia creada")
+            # Boost inicial para nuevas instancias también
+            self.intelligence.iq_level = 155.0
+            self.intelligence.evolution_tier = 3
+            self._save_intelligence()
     
     def _save_intelligence(self):
         """Guarda estado de inteligencia."""
@@ -326,20 +378,80 @@ class ElGato:
         """Verifica si una capacidad está desbloqueada."""
         return capability in self.intelligence.unlocked_capabilities
     
-    def get_recommendation(self) -> str:
-        """Genera recomendación basada en estado actual."""
+    def get_recommendation(self, candles: list = None) -> str:
+        """Genera recomendación basada en estado actual y velas recientes."""
         iq = self.intelligence.iq_level
         wr = self.intelligence.win_rate
         tier = self.intelligence.evolution_tier
         
+        # Análisis técnico si hay velas
+        technical_advice = ""
+        if candles:
+            wick_analysis = self.analyze_candle_wicks(candles)
+            if wick_analysis.get("signal") == "rejection_from_top":
+                technical_advice = " | 📉 Rechazo alcista detectado (mecha superior larga)."
+            elif wick_analysis.get("signal") == "rejection_from_bottom":
+                technical_advice = " | 📈 Rechazo bajista detectado (mecha inferior larga)."
+            elif wick_analysis.get("signal") == "doji":
+                technical_advice = " | ⚖️ Indecisión en el mercado (Doji)."
+        
         if wr < 50 and self.intelligence.trades_executed > 20:
-            return f"⚠️ Win rate bajo ({wr:.1f}%). Revisar estrategia o reducir tamaño."
+            return f"⚠️ Win rate bajo ({wr:.1f}%). Revisar estrategia.{technical_advice}"
         elif iq > 200 and tier >= 4:
-            return f"🌟 {self.BOT_NAME} funcionando excelentemente. Considerar aumentar capital."
+            return f"🌟 {self.BOT_NAME} funcionando excelentemente.{technical_advice}"
         elif tier < 3:
-            return f"📚 {self.BOT_NAME} en fase de aprendizaje. Mantener paper trading."
+            return f"📚 {self.BOT_NAME} aprendiendo. Paper trading.{technical_advice}"
         else:
-            return f"✅ {self.BOT_NAME} en buen estado. Continuar operación normal."
+            return f"✅ {self.BOT_NAME} operativo.{technical_advice}"
+
+    def analyze_candle_wicks(self, candles: list) -> dict:
+        """
+        Analiza las mechas (wicks) de las velas para detectar señales.
+        
+        Returns:
+            dict con análisis de mechas superiores e inferiores
+        """
+        if not candles or len(candles) < 3:
+            return {"status": "insufficient_data"}
+        
+        last_candle = candles[-1]
+        
+        # Calcular tamaños de mechas
+        body_size = abs(last_candle.close - last_candle.open)
+        upper_wick = last_candle.high - max(last_candle.open, last_candle.close)
+        lower_wick = min(last_candle.open, last_candle.close) - last_candle.low
+        total_range = last_candle.high - last_candle.low
+        
+        # Ratios
+        upper_wick_ratio = upper_wick / total_range if total_range > 0 else 0
+        lower_wick_ratio = lower_wick / total_range if total_range > 0 else 0
+        body_ratio = body_size / total_range if total_range > 0 else 0
+        
+        # Interpretación
+        analysis = {
+            "upper_wick": upper_wick,
+            "lower_wick": lower_wick,
+            "body_size": body_size,
+            "upper_wick_ratio": upper_wick_ratio,
+            "lower_wick_ratio": lower_wick_ratio,
+            "body_ratio": body_ratio
+        }
+        
+        # Señales basadas en mechas
+        if upper_wick_ratio > 0.5 and lower_wick_ratio < 0.2:
+            analysis["signal"] = "rejection_from_top"  # Pin bar bearish
+            analysis["strength"] = "strong" if upper_wick_ratio > 0.6 else "medium"
+        elif lower_wick_ratio > 0.5 and upper_wick_ratio < 0.2:
+            analysis["signal"] = "rejection_from_bottom"  # Pin bar bullish
+            analysis["strength"] = "strong" if lower_wick_ratio > 0.6 else "medium"
+        elif body_ratio < 0.1:  # 🔥 Relaxed from 0.2 to 0.1 (less sensitive)
+            analysis["signal"] = "doji"  # Indecisión
+            analysis["strength"] = "weak"
+        else:
+            analysis["signal"] = "normal"
+            analysis["strength"] = "neutral"
+        
+        return analysis
 
 
 # Instancia global

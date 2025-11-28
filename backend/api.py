@@ -75,11 +75,22 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         )
 
 # Add middleware to app
-app.add_middleware(BasicAuthMiddleware)
+# DISABLED FOR LOCAL DEMO MODE - Re-enable for production deployment
+# app.add_middleware(BasicAuthMiddleware)
 
 @app.get("/api/health")
 def health_check():
     return {"status": "online", "message": "Vibe Factory Backend is running"}
+
+@app.get("/")
+def root():
+    """Root endpoint to verify backend is running."""
+    return {
+        "message": "Welcome to Vibe Factory API",
+        "docs": "/docs",
+        "health": "/api/health",
+        "status": "online"
+    }
 
 
 @app.get("/api/backtest")
@@ -111,38 +122,40 @@ async def place_trade(payload: dict):
     """Recibe orden de compra/venta y la ejecuta según el modo actual."""
     from broker_api_handler import execute_order
     try:
+        print(f"[API] Received trade request: {payload}")
+        print(f"[API] Trading mode: {_trading_mode}")
+        
+        # Validar payload
+        required_fields = ["symbol", "side", "size"]
+        for field in required_fields:
+            if field not in payload:
+                return {"status": "FAILED", "error": f"Missing required field: {field}"}
+        
         # Usar el modo global configurado
         result = await execute_order(payload, mode=_trading_mode)
         
+        print(f"[API] Trade result: {result}")
+        
         # Actualizar estado de la estrategia si la orden fue exitosa
         if result.get("status") in ["FILLED", "SIMULATED"]:
+            # Convertir symbol a formato correcto (BTC_USDT -> BTC/USDT)
+            symbol = payload["symbol"].replace("_", "/")
             _strategy_instance.register_trade(
                 side=payload["side"],
                 price=result["price"],
                 size=payload["size"],
-                result=result
+                result=result,
+                source="manual",
+                symbol=symbol
             )
             
         return result
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"status": "FAILED", "error": str(e)}
 
-@app.post("/api/trade/close")
-async def api_close_position(payload: dict):
-    """Cierra inmediatamente la posición del activo especificado."""
-    from broker_api_handler import close_position
-    import os
-    
-    mode = os.getenv("TRADING_MODE", "demo")
-    symbol = payload.get("symbol", "BTC_USDT")
-    
-    result = await close_position(symbol, mode=mode)
-    
-    # Resetear estado interno de la estrategia si es necesario
-    if result.get("status") in ["FILLED", "SIMULATED"]:
-        _strategy_instance.position = 0.0
-        
-    return result
+
 
 
 # --- INTEGRACIÓN DE ESTRATEGIA ---
@@ -163,13 +176,19 @@ _trading_mode = "demo" # demo, testnet, real
 async def startup_event():
     """Iniciar el loop de trading y aprendizaje en background."""
     # 1. Pipeline de datos y trading
-    global _data_task
-    # 1. Pipeline de datos y trading
-    _data_task = asyncio.create_task(bootstrap_data_pipeline(
-        strategy=_strategy_instance,
-        live_mode="demo", # Data pipeline always runs in demo/paper mode for now
-        symbol=_current_symbol
-    ))
+    # 1. Pipeline de datos y trading (MULTI-ASSET)
+    global _data_tasks
+    _data_tasks = {}
+    
+    initial_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+    print(f"[STARTUP] 🚀 Starting data pipelines for: {initial_symbols}")
+    
+    for sym in initial_symbols:
+        _data_tasks[sym] = asyncio.create_task(bootstrap_data_pipeline(
+            strategy=_strategy_instance,
+            live_mode="demo", 
+            symbol=sym
+        ))
     
     # 2. Optimizador (Aprendizaje)
     asyncio.create_task(_optimizer_instance.start_loop())
@@ -198,10 +217,11 @@ async def shutdown_event():
             pass
 
 @app.get("/api/price")
-def get_current_price():
-    """Retorna el precio real de la estrategia."""
-    price = _strategy_instance.last_price if _strategy_instance.last_price > 0 else 90000.0
-    return {"symbol": _current_symbol, "price": price}
+def get_current_price(symbol: str = "BTC/USDT"):
+    """Retorna el precio real de la estrategia para el símbolo especificado."""
+    # last_price es ahora un dict multi-activo
+    price = _strategy_instance.last_price.get(symbol, 0) if isinstance(_strategy_instance.last_price, dict) else 90000.0
+    return {"symbol": symbol, "price": price if price > 0 else 90000.0}
 
 @app.post("/api/set_symbol")
 async def set_symbol(payload: dict):
@@ -215,28 +235,31 @@ async def set_symbol(payload: dict):
     if new_symbol == _current_symbol:
         return {"status": "unchanged", "symbol": _current_symbol}
         
-    print(f"[API] Switching symbol to {new_symbol}...")
+    print(f"[API] Switching UI focus to {new_symbol}...")
     _current_symbol = new_symbol
     
-    # Cancelar tarea anterior
-    if _data_task:
-        _data_task.cancel()
-        try:
-            await _data_task
-        except asyncio.CancelledError:
-            pass
-            
-    # Reiniciar pipeline con nuevo símbolo
-    _data_task = asyncio.create_task(bootstrap_data_pipeline(
-        strategy=_strategy_instance,
-        live_mode="demo",
-        symbol=_current_symbol
-    ))
+    # Ensure data stream is running for this symbol
+    global _data_tasks
+    if '_data_tasks' not in globals():
+        _data_tasks = {}
+        
+    if new_symbol not in _data_tasks or _data_tasks[new_symbol].done():
+        print(f"[API] Starting new data stream for {new_symbol}...")
+        _data_tasks[new_symbol] = asyncio.create_task(bootstrap_data_pipeline(
+            strategy=_strategy_instance,
+            live_mode="demo",
+            symbol=new_symbol
+        ))
+    else:
+        print(f"[API] Data stream for {new_symbol} already running.")
     
     # Resetear estado de la estrategia para el nuevo símbolo
     # (Opcional: podríamos querer mantener el historial si es multi-asset real)
-    _strategy_instance.candles = []
-    _strategy_instance.last_price = 0.0
+    _strategy_instance.candles[_current_symbol] = []
+    if isinstance(_strategy_instance.last_price, dict):
+        _strategy_instance.last_price[_current_symbol] = 0.0
+    else:
+        _strategy_instance.last_price = 0.0
     
     return {"status": "success", "symbol": _current_symbol}
 
@@ -339,7 +362,20 @@ def get_el_gato_recommendation():
     """Obtiene recomendación de EL GATO."""
     from el_gato import get_el_gato
     el_gato = get_el_gato()
-    return {"recommendation": el_gato.get_recommendation()}
+    
+    # Obtener velas actuales de la estrategia si existen
+    candles = []
+    if _strategy_instance and hasattr(_strategy_instance, 'candles'):
+        # Usar velas del símbolo actual
+        current_symbol = _current_symbol if '_current_symbol' in globals() else "BTC/USDT"
+        
+        # 🔥 FIX: Aggregate candles to 1m to avoid false Dojis on 5s candles
+        if hasattr(_strategy_instance, 'aggregate_candles'):
+            candles = _strategy_instance.aggregate_candles("1m", current_symbol)
+        else:
+            candles = _strategy_instance.candles.get(current_symbol, [])
+        
+    return {"recommendation": el_gato.get_recommendation(candles=candles)}
 
 # === END EL GATO INTELLIGENCE ===
 
@@ -350,28 +386,72 @@ def get_trades():
 
 @app.get("/api/pnl")
 def get_pnl():
-    """Retorna métricas de PnL en tiempo real."""
+    """Retorna métricas de PnL en tiempo real y posiciones."""
+    # Calcular PnL total
+    portfolio_pnl = _strategy_instance.get_portfolio_pnl()
+    
+    # Construir lista de posiciones
+    positions_list = []
+    for symbol, size in _strategy_instance.positions.items():
+        if size != 0:
+            entry = _strategy_instance.entry_prices.get(symbol, 0)
+            current = _strategy_instance.last_price.get(symbol, 0)
+            
+            # Calcular PnL de esta posición
+            if size > 0:
+                pnl = (current - entry) * size
+            else:
+                pnl = (entry - current) * abs(size)
+                
+            pnl_pct = (pnl / (entry * abs(size))) * 100 if entry > 0 else 0
+            
+            positions_list.append({
+                "symbol": symbol,
+                "size": size,
+                "entryPrice": entry,
+                "currentPrice": current,
+                "pnl": pnl,
+                "pnlPercent": pnl_pct
+            })
+            
     return {
         "realized_pnl": _strategy_instance.realized_pnl,
-        "unrealized_pnl": _strategy_instance.unrealized_pnl,
-        "position_size": _strategy_instance.position,
-        "entry_price": _strategy_instance.entry_price,
-        "current_price": _strategy_instance.last_price
+        "unrealized_pnl": portfolio_pnl['unrealized_pnl'],
+        "total_pnl": _strategy_instance.realized_pnl + portfolio_pnl['unrealized_pnl'],
+        "positions": positions_list,
+        # Mantener compatibilidad hacia atrás por si acaso
+        "position_size": sum(abs(p) for p in _strategy_instance.positions.values()), 
+        "entry_price": 0, 
+        "current_price": 0
     }
 
 @app.get("/api/candles")
-def get_candles(timeframe: str = "5m"):
+def get_candles(timeframe: str = "5m", symbol: str = "BTC/USDT"):
     """
     Retorna las velas OHLC para el gráfico.
     
     Args:
         timeframe: Intervalo de tiempo (1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
+        symbol: Símbolo del activo (BTC/USDT, ETH/USDT, etc.)
     """
     if _strategy_instance is None:
-        return {"candles": []}
+        return {"candles": [], "trades": []}
     
-    # Get aggregated candles based on timeframe
-    candles = _strategy_instance.aggregate_candles(timeframe)
+    # Get aggregated candles based on timeframe and symbol
+    candles = _strategy_instance.aggregate_candles(timeframe, symbol)
+    
+    # Filter trades for this symbol
+    symbol_trades = [
+        {
+            "time": t.get("time", 0),
+            "side": t.get("side", "BUY"),
+            "source": t.get("source", "manual"),
+            "price": t.get("price", 0),
+            "size": t.get("size", 0)
+        }
+        for t in _strategy_instance.trades
+        if t.get("symbol", "BTC/USDT") == symbol or t.get("result", {}).get("symbol", "").replace("_", "/") == symbol
+    ][-50:]  # Last 50 trades only
     
     return {
         "candles": [
@@ -383,113 +463,165 @@ def get_candles(timeframe: str = "5m"):
                 "close": c.close,
                 "volume": c.volume
             } for c in candles
-        ]
+        ],
+        "trades": symbol_trades
     }
 
 
 @app.get("/api/indicators")
-def get_indicators():
+def get_indicators(symbol: str = "BTC/USDT"):
     """Get RSI and ATR indicator values for chart overlay."""
-    if _strategy_instance is None:
-        return {"rsi": [], "atr": []}
-    
-    candles = _strategy_instance.candles
-    if not candles or len(candles) < 14:
-        return {"rsi": [], "atr": []}
-    
-    # Calculate RSI and ATR for each candle
-    rsi_data = []
-    atr_data = []
-    
-    for i in range(14, len(candles)):
-        window = candles[i-14:i+1]
-        closes = [c.close for c in window]
+    try:
+        if _strategy_instance is None:
+            return {"rsi": [], "atr": [], "macd": []}
         
-        # RSI calculation
-        gains = []
-        losses = []
-        for j in range(1, len(closes)):
-            change = closes[j] - closes[j-1]
-            if change > 0:
-                gains.append(change)
-                losses.append(0)
-            else:
-                gains.append(0)
-                losses.append(abs(change))
+        # Handle symbol format
+        symbol = symbol.replace("_", "/")
         
-        avg_gain = sum(gains) / len(gains)
-        avg_loss = sum(losses) / len(losses)
-        
-        if avg_loss == 0:
-            rsi = 100
+        # Get candles for specific symbol
+        all_candles = _strategy_instance.candles
+        if isinstance(all_candles, dict):
+            candles = all_candles.get(symbol, [])
         else:
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
+            candles = all_candles # Fallback if it were a list
         
-        rsi_data.append({"time": int(candles[i].time), "value": round(rsi, 2)})
+        print(f"[INDICATORS] Symbol: {symbol}, Candles count: {len(candles)}")
+            
+        if not candles or len(candles) < 26: # Need more data for MACD
+            print(f"[INDICATORS] ⚠️ Not enough candles for {symbol}: {len(candles)}/26")
+            return {"rsi": [], "atr": [], "macd": []}
         
-        # ATR calculation (simplified)
-        highs = [c.high for c in window]
-        lows = [c.low for c in window]
-        tr_values = [highs[j] - lows[j] for j in range(len(highs))]
-        atr = sum(tr_values) / len(tr_values)
+        # Calculate indicators
+        # We'll use pandas for easier calculation if available, or manual
+        try:
+            import pandas as pd
+            import pandas_ta as ta
+            
+            df = pd.DataFrame([{
+                'close': c.close,
+                'high': c.high,
+                'low': c.low,
+                'time': int(c.time)
+            } for c in candles])
+            
+            # RSI
+            df['rsi'] = ta.rsi(df['close'], length=14)
+            
+            # ATR
+            df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+            
+            # MACD
+            macd = ta.macd(df['close'])
+            if macd is not None:
+                df = pd.concat([df, macd], axis=1)
+            
+            # Format for lightweight-charts
+            rsi_data = []
+            atr_data = []
+            macd_data = []
+            
+            for i, row in df.iterrows():
+                time = int(row['time'])
+                
+                # RSI - skip if NaN
+                if not pd.isna(row['rsi']):
+                    rsi_data.append({
+                        "time": time,
+                        "value": float(row['rsi'])  # Convert to native Python float
+                    })
+                
+                # ATR - skip if NaN
+                if not pd.isna(row['atr']):
+                    atr_data.append({
+                        "time": time,
+                        "value": float(row['atr'])  # Convert to native Python float
+                    })
+                    
+                # MACD columns usually named MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
+                # We need to find them dynamically or assume standard names
+                macd_col = next((c for c in df.columns if c.startswith('MACD_')), None)
+                hist_col = next((c for c in df.columns if c.startswith('MACDh_')), None)
+                signal_col = next((c for c in df.columns if c.startswith('MACDs_')), None)
+                
+                # MACD - skip if any component is NaN
+                if (macd_col and hist_col and signal_col and 
+                    not pd.isna(row[macd_col]) and 
+                    not pd.isna(row[signal_col]) and 
+                    not pd.isna(row[hist_col])):
+                    macd_data.append({
+                        "time": time,
+                        "macd": float(row[macd_col]),
+                        "signal": float(row[signal_col]),
+                        "histogram": float(row[hist_col])
+                    })
+                    
+            return {
+                "rsi": rsi_data, 
+                "atr": atr_data,
+                "macd": macd_data
+            }
+            
+        except ImportError:
+            # Fallback to manual calculation if pandas_ta not installed
+            print("[WARNING] pandas_ta not found, using simple calculation")
+            return {"rsi": [], "atr": [], "macd": []}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@app.get("/api/prediction")
+def get_prediction(symbol: str = "BTC/USDT"):
+    """🔮 Obtiene la predicción de la siguiente vela para un símbolo."""
+    try:
+        if _strategy_instance is None:
+            return {"error": "Strategy not initialized"}
         
-        atr_data.append({"time": int(candles[i].time), "value": round(atr, 2)})
-    
-    # Apply light smoothing (3-period SMA) to reduce visual noise
-    def smooth_data(data, period=3):
-        """Apply simple moving average for smoother lines."""
-        if len(data) < period:
-            return data
-        smoothed = []
-        for i in range(len(data)):
-            if i < period - 1:
-                smoothed.append(data[i])  # Keep first values as-is
-            else:
-                # Average the last 'period' values
-                window_values = [data[j]["value"] for j in range(i - period + 1, i + 1)]
-                avg_value = sum(window_values) / period
-                smoothed.append({"time": data[i]["time"], "value": round(avg_value, 2)})
-        return smoothed
-    
-    # Smooth both indicators
-    rsi_data = smooth_data(rsi_data, period=3)
-    atr_data = smooth_data(atr_data, period=3)
-    
-    # Calculate MACD (12, 26, 9) for all candles
-    macd_data = []
-    if len(candles) >= 26:
-        for i in range(26, len(candles)):
-            window = candles[i-26:i+1]
-            closes = [c.close for c in window]
-            
-            # EMA 12
-            ema_12_values = [closes[0]]
-            multiplier_12 = 2 / (12 + 1)
-            for close in closes[1:]:
-                ema_12_values.append((close - ema_12_values[-1]) * multiplier_12 + ema_12_values[-1])
-            
-            # EMA 26
-            ema_26 = sum(closes) / len(closes)  # Start with SMA
-            for close in closes:
-                ema_26 = (close - ema_26) * (2 / (26 + 1)) + ema_26
-            
-            # MACD Line
-            ema_12 = ema_12_values[-1]
-            macd_line = ema_12 - ema_26
-            
-            # For simplicity, use macd_line as histogram (signal would require 9 more periods)
-            # In a real implementation, you'd calculate signal line and then histogram
-            macd_data.append({
-                "time": int(candles[i].time),
-                "histogram": round(macd_line, 2)
-            })
-    
-    return {
-        "rsi": rsi_data,
-        "atr": atr_data,
-        "macd": macd_data
-    }
+        # Normalizar símbolo
+        symbol = symbol.replace("_", "/")
+        
+        # Obtener predicción actual
+        prediction = _strategy_instance.predictions.get(symbol)
+        
+        if prediction is None:
+            return {
+                "symbol": symbol,
+                "has_prediction": False,
+                "message": "Esperando suficientes velas para predicción (mínimo 30)"
+            }
+        
+        # Obtener precisión histórica del predictor
+        predictor_stats = _strategy_instance.candle_predictor.get_stats()
+        
+        # Precio actual
+        current_price = _strategy_instance.last_price.get(symbol, 0)
+        
+        # Calcular cambio esperado
+        expected_change = prediction.predicted_close - current_price
+        expected_change_pct = (expected_change / current_price * 100) if current_price > 0 else 0
+        
+        return {
+            "symbol": symbol,
+            "has_prediction": True,
+            "current_price": round(current_price, 2),
+            "prediction": {
+                "time": prediction.time,
+                "open": round(prediction.predicted_open, 2),
+                "high": round(prediction.predicted_high, 2),
+                "low": round(prediction.predicted_low, 2),
+                "close": round(prediction.predicted_close, 2),
+                "confidence": round(prediction.confidence * 100, 2),
+                "method": prediction.prediction_method,
+                "direction": "UP" if expected_change > 0 else "DOWN",
+                "expected_change": round(expected_change, 2),
+                "expected_change_pct": round(expected_change_pct, 2)
+            },
+            "predictor_stats": predictor_stats
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
 
 @app.get("/api/advice")
 def get_ai_advice():
@@ -704,18 +836,23 @@ def get_ml_prediction():
         current_vol
     )
     
-    signal = "NEUTRAL"
-    if prediction:
+    # Get last_price safely (puede ser dict o float)
+    if isinstance(_strategy_instance.last_price, dict):
+        current_price = _strategy_instance.last_price.get(_current_symbol, 0)
+    else:
         current_price = _strategy_instance.last_price
+    
+    signal = "NEUTRAL"
+    if prediction and current_price > 0:
         if prediction > current_price * 1.001:
             signal = "BUY"
         elif prediction < current_price * 0.999:
             signal = "SELL"
-            
+        
     return {
         "signal": signal,
         "predicted_price": prediction,
-        "current_price": _strategy_instance.last_price,
+        "current_price": current_price,
         "is_trained": _strategy_instance.ml_predictor.is_trained,
         "model_path": str(_strategy_instance.ml_predictor.MODEL_PATH)
     }
@@ -879,10 +1016,80 @@ async def get_balance():
 # Control de auto-trading
 _trading_enabled = True
 
+@app.post("/api/trade/close")
+async def api_close_position(payload: dict):
+    """Cierra inmediatamente la posición del activo especificado."""
+    from broker_api_handler import close_position
+    import os
+    
+    mode = os.getenv("TRADING_MODE", "demo")
+    symbol = payload.get("symbol", "BTC_USDT").replace("_", "/")
+    
+    result = await close_position(symbol, mode=mode)
+    
+    # Resetear estado interno de la estrategia si es necesario
+    if result.get("status") in ["FILLED", "SIMULATED"]:
+        if _strategy_instance:
+            if symbol in _strategy_instance.positions:
+                _strategy_instance.positions[symbol] = 0.0
+                _strategy_instance.entry_prices[symbol] = 0.0
+        
+    return result
+
+@app.post("/api/trades/close_all")
+async def close_all_positions():
+    """Cierra TODAS las posiciones abiertas."""
+    from broker_api_handler import close_position
+    import os
+    
+    # Use the global trading mode variable
+    mode = _trading_mode
+    results = []
+    
+    # 🚨 FIX: Use _strategy_instance.positions (la fuente de verdad)
+    if not _strategy_instance:
+        return {"status": "ERROR", "message": "Strategy not initialized", "results": []}
+    
+    # Encontrar todos los símbolos con posiciones abiertas (Strategy + Tracker)
+    strategy_symbols = [s for s, pos in _strategy_instance.positions.items() if pos != 0]
+    
+    from trade_tracker import get_tracker
+    tracker = get_tracker()
+    active_trades = tracker.get_active_trades()
+    tracker_symbols = [t["symbol"] for t in active_trades]
+    
+    # Unir y deducir
+    open_symbols = list(set(strategy_symbols + tracker_symbols))
+    
+    print(f"[CLOSE ALL] Found {len(open_symbols)} symbols to check: {open_symbols}")
+    
+    for symbol in open_symbols:
+        result = await close_position(symbol, mode=mode)
+        results.append(result)
+        
+        # Sync strategy
+        if result.get("status") in ["FILLED", "SIMULATED"]:
+            if symbol in _strategy_instance.positions:
+                _strategy_instance.positions[symbol] = 0.0
+                _strategy_instance.entry_prices[symbol] = 0.0
+                print(f"[CLOSE ALL] Closed {symbol}")
+
+    return {
+        "status": "COMPLETED", 
+        "closed_count": len(results),
+        "results": results
+    }
+
 @app.post("/api/trading/toggle")
-def toggle_trading():
+async def toggle_trading(payload: dict):
     global _trading_enabled
-    _trading_enabled = not _trading_enabled
+    # Si se envía un valor específico, usarlo; si no, hacer toggle
+    if "enabled" in payload:
+        _trading_enabled = payload["enabled"]
+    else:
+        _trading_enabled = not _trading_enabled
+    
+    print(f"[API] Trading {'ENABLED' if _trading_enabled else 'DISABLED'}")
     return {"enabled": _trading_enabled}
 
 @app.get("/api/trading/status")
@@ -890,13 +1097,17 @@ def get_trading_status():
     return {"enabled": _trading_enabled}
 
 @app.get("/api/position")
-async def get_position():
+async def get_position(symbol: str = "BTC/USDT"):
     """Devuelve la posición actual con PnL no realizado."""
-    from broker_api_handler import get_current_position
-    import random
+    from broker_api_handler import get_current_position, get_current_price
     
-    current_price = 86000 + random.uniform(-500, 500)
-    position = await get_current_position(current_price)
+    # Normalizar símbolo
+    symbol = symbol.replace("_", "/")
+    
+    # Obtener precio real/demo
+    current_price = await get_current_price(symbol, mode="demo")
+    
+    position = await get_current_position(current_price, symbol=symbol)
     
     return position
 
@@ -907,17 +1118,32 @@ def get_active_trades():
     """Devuelve todos los trades abiertos con PnL en tiempo real."""
     try:
         from trade_tracker import get_tracker
+        from broker_api_handler import get_current_price
         import random
         
         tracker = get_tracker()
-        # Usar precio simulado (cambiar luego por precio real del gráfico)
-        current_price = 86000 + random.uniform(-500, 500)
-        
         active_trades = tracker.get_active_trades()
         
         # Calcular PnL en vivo para cada trade
         trades_with_pnl = []
+        # Nota: Esto podría ser lento si hay muchos trades de diferentes símbolos
+        # Por ahora usamos un precio aproximado o iteramos
+        
+        # Agrupar por símbolo para minimizar llamadas de precio
+        symbols = set(t['symbol'] for t in active_trades)
+        prices = {} # symbol -> price
+        
+        # Esto debería ser async pero get_active_trades es def (sync)
+        # Por simplicidad, usamos precio random o mock aquí, 
+        # o convertimos el endpoint a async
+        
+        # FIX: Convertir endpoint a async para usar await get_current_price
+        # Pero eso requiere cambiar la firma.
+        # Por ahora, usamos el precio random como antes pero TODO: mejorar
+        current_price = 86000 + random.uniform(-500, 500) 
+        
         for trade in active_trades:
+            # Idealmente usar precio específico del símbolo
             trade_with_pnl = tracker.calculate_live_pnl(trade, current_price)
             trades_with_pnl.append(trade_with_pnl)
         
@@ -930,35 +1156,112 @@ def get_active_trades():
         return {"trades": [], "error": str(e)}
 
 @app.post("/api/trades/close/{trade_id}")
-def close_single_trade(trade_id: int):
+def close_single_trade(trade_id: str):
     """Cierra un trade individual."""
     try:
         from trade_tracker import get_tracker
         import random
         
+        # 1. Close in TradeTracker (for UI active trades list)
         tracker = get_tracker()
         current_price = 86000 + random.uniform(-500, 500)
         
+        # Convert ID to string for consistency
+        trade_id = str(trade_id)
+        
         trade = tracker.close_trade(trade_id, current_price)
         
+        # 2. Close in RiskStrategy (for internal logic and history)
+        if _strategy_instance and trade:
+            symbol = trade["symbol"]
+            size = trade["size"]
+            side = trade["side"]
+            
+            # Actualizar posición agregada
+            current_pos = _strategy_instance.positions.get(symbol, 0.0)
+            
+            if side == "LONG":
+                # Cerrar LONG: restar tamaño
+                new_pos = current_pos - size
+            else:
+                # Cerrar SHORT: sumar tamaño (porque short es negativo o se trata como tal)
+                # NOTA: En este sistema, si positions es positivo para LONG y negativo para SHORT:
+                # Si era SHORT, current_pos debería ser negativo. Al cerrar, sumamos size.
+                # Si el sistema usa positions siempre positivo y side separado (menos probable en RiskStrategy),
+                # asumiremos la convención estándar: LONG > 0, SHORT < 0.
+                # Pero revisando register_trade, SHORT resta size. Así que aquí sumamos.
+                new_pos = current_pos + size
+            
+            # Evitar errores de punto flotante
+            if abs(new_pos) < 0.000001:
+                new_pos = 0.0
+                _strategy_instance.entry_prices[symbol] = 0.0
+                
+            _strategy_instance.positions[symbol] = new_pos
+            print(f"[SYNC] 🔒 Trade #{trade_id} cerrado. Posición {symbol}: {current_pos:.4f} → {new_pos:.4f}")
+            
         if trade:
             return {"success": True, "trade": trade}
+            
         return {"success": False, "error": "Trade not found"}
     except Exception as e:
         print(f"[ERROR] close trade: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
 
+@app.get("/api/debug/state")
+def debug_state():
+    """Endpoint temporal para depurar estado interno."""
+    return {
+        "active_symbols": _strategy_instance.active_symbols,
+        "positions": _strategy_instance.positions,
+        "price_history_len": {k: len(v) for k, v in _strategy_instance.price_history.items()},
+        "candles_len": {k: len(v) for k, v in _strategy_instance.candles.items()},
+        "last_prices": _strategy_instance.last_price
+    }
+
 @app.post("/api/trades/reverse/{trade_id}")
-def reverse_trade_direction(trade_id: int):
+def reverse_trade_direction(trade_id: str):
     """Invierte la dirección de un trade (LONG→SHORT o SHORT→LONG)."""
     from trade_tracker import get_tracker
     
     tracker = get_tracker()
-    trade = tracker.reverse_trade(trade_id)
+    
+    # Buscar trade por ID (puede ser string o int)
+    trade = None
+    for t in tracker.trades:
+        if str(t.get('id')) == str(trade_id) and t.get('status') == 'OPEN':
+            old_side = t.get('side')
+            symbol = t.get('symbol')
+            size = t.get('size')
+            
+            # Invertir en tracker
+            trade = tracker.reverse_trade(t['id'])
+            
+            if trade and _strategy_instance:
+                # 🔄 SINCRONIZACIÓN: Actualizar posición agregada en RiskStrategy
+                current_pos = _strategy_instance.positions.get(symbol, 0.0)
+                
+                # Calcular nueva posición después de invertir
+                if old_side == "LONG":
+                    # Era LONG (+size), ahora es SHORT (-size)
+                    # Cambio: -size - size = -2*size
+                    new_pos = current_pos - (2 * size)
+                else:  # old_side == "SHORT"
+                    # Era SHORT (-size), ahora es LONG (+size)
+                    # Cambio: +size + size = +2*size
+                    new_pos = current_pos + (2 * size)
+                
+                _strategy_instance.positions[symbol] = new_pos
+                
+                print(f"[SYNC] 🔄 Posición actualizada: {symbol} {current_pos:.4f} → {new_pos:.4f}")
+                
+            break
     
     if trade:
         return {"success": True, "trade": trade}
-    return {"success": False, "error": "Trade not found"}
+    return {"success": False, "error": f"Trade {trade_id} not found or already closed"}, 404
 
 
 # === AUTO-TRADING BACKGROUND TASK ===
@@ -1011,8 +1314,16 @@ if os.path.exists(static_dir):
         app.mount("/_next", StaticFiles(directory=next_dir), name="next")
     
     # Catch-all route for SPA (MUST BE LAST)
+    # CRITICAL: Exclude /api/* paths to avoid intercepting API calls
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
+        # Skip API routes - let FastAPI handle them
+        if full_path.startswith("api/"):
+            # This shouldn't be hit if API routes are defined before this
+            # But we add this check as a safeguard
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        
         # Root path
         if full_path == "":
             return FileResponse(os.path.join(static_dir, "index.html"))

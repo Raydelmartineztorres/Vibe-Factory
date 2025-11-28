@@ -26,8 +26,8 @@ class MLPredictor:
     def __init__(self):
         # Random Forest con parámetros optimizados
         self.model = RandomForestRegressor(
-            n_estimators=50,       # 50 árboles (balance velocidad/precisión)
-            max_depth=10,          # Profundidad máxima para evitar overfitting
+            n_estimators=100,      # 🔥 100 árboles (más capacidad)
+            max_depth=20,          # 🔥 Profundidad 20 (análisis más profundo)
             min_samples_split=5,   # Mínimo de muestras para dividir
             random_state=42,       # Reproducibilidad
             n_jobs=-1              # Usar todos los cores
@@ -41,8 +41,8 @@ class MLPredictor:
         # Intentar cargar modelo existente
         self.load_model()
         
-    def _extract_features(self, price_history: list[float], rsi: float, atr: float, volume: float) -> np.ndarray:
-        """Extrae 15 features avanzados para el modelo."""
+    def _extract_features(self, price_history: list[float], rsi: float, atr: float, volume: float, adx: float, cci: float) -> np.ndarray:
+        """Extrae 17 features avanzados para el modelo."""
         if len(price_history) < 20:
             return None
             
@@ -72,7 +72,7 @@ class MLPredictor:
         ema_long = np.mean(recent_prices[-15:])   # EMA aproximado 15 periodos
         trend_strength = (ema_short - ema_long) / ema_long if ema_long > 0 else 0
         
-        # 15 features en total
+        # 17 features en total (Added ADX & CCI)
         features = np.array([
             price_current,          # 1. Precio actual
             price_mean_10,          # 2. Media 10 periodos
@@ -88,14 +88,16 @@ class MLPredictor:
             delta_1,                # 12. Delta precio -1
             delta_2,                # 13. Delta precio -2
             trend_strength,         # 14. Fuerza de tendencia
-            ema_short / ema_long if ema_long > 0 else 1.0  # 15. Ratio EMA corto/largo
+            ema_short / ema_long if ema_long > 0 else 1.0,  # 15. Ratio EMA corto/largo
+            adx,                    # 16. ADX (Trend Strength)
+            cci                     # 17. CCI (Cyclical Trends)
         ])
         
         return features
         
-    def update(self, price_history: list[float], rsi: float, atr: float, volume: float, actual_next_price: float):
+    def update(self, price_history: list[float], rsi: float, atr: float, volume: float, adx: float, cci: float, actual_next_price: float):
         """Actualiza el modelo con nuevos datos."""
-        features = self._extract_features(price_history, rsi, atr, volume)
+        features = self._extract_features(price_history, rsi, atr, volume, adx, cci)
         
         if features is None:
             return
@@ -129,7 +131,7 @@ class MLPredictor:
             if len(X) >= 100:  # Solo si tenemos datos suficientes
                 scores = cross_val_score(self.model, X, y, cv=3, scoring='r2')
                 accuracy = np.mean(scores)
-                print(f"[ML] 🎯 Modelo entrenado: R² = {accuracy:.3f} (15 features, {len(X)} muestras)")
+                print(f"[ML] 🎯 Modelo entrenado: R² = {accuracy:.3f} (17 features, {len(X)} muestras)")
             else:
                 print(f"[ML] ✅ Modelo Random Forest entrenado con {len(X)} muestras")
             
@@ -140,12 +142,12 @@ class MLPredictor:
             print(f"[ML] ❌ Error entrenando: {e}")
             self.is_trained = False
             
-    def predict(self, price_history: list[float], rsi: float, atr: float, volume: float) -> Optional[float]:
+    def predict(self, price_history: list[float], rsi: float, atr: float, volume: float, adx: float, cci: float) -> Optional[float]:
         """Predice el próximo precio."""
         if not self.is_trained:
             return None
             
-        features = self._extract_features(price_history, rsi, atr, volume)
+        features = self._extract_features(price_history, rsi, atr, volume, adx, cci)
         
         if features is None:
             return None
@@ -157,14 +159,14 @@ class MLPredictor:
             print(f"[ML] Error en predicción: {e}")
             return None
             
-    def get_signal(self, current_price: float, predicted_price: float, threshold: float = 0.0005) -> str:
+    def get_signal(self, current_price: float, predicted_price: float, threshold: float = 0.0002) -> str:
         """
         Genera señal basada en predicción.
         
         Args:
             current_price: Precio actual
             predicted_price: Precio predicho
-            threshold: Umbral mínimo de cambio (0.05% por defecto)
+            threshold: Umbral mínimo de cambio (0.02% por defecto - 🔥 MÁS SENSIBLE)
             
         Returns:
             "BUY", "SELL", o "NEUTRAL"

@@ -130,11 +130,17 @@ class TradeMemory:
         current_time = time.time()
         
         for e in self.experiences:
-            # Match exacto de trend y volatility
-            if (e["context"]["trend"] != context.trend or 
-                e["context"]["volatility"] != context.volatility):
-                continue
-                
+            # 2. Check context similarity (if we have context)
+            # 2. Check context similarity (if we have context)
+            if "context" in e and context:
+                e_ctx = e["context"]
+                # Safe access to nested keys - String comparison
+                if (e_ctx.get("trend") != context.trend or
+                    e_ctx.get("volatility") != context.volatility):
+                    continue
+            elif "context" not in e:
+                 # Skip experiences without context if we are looking for specific context
+                 continue              
             # Match de zona RSI
             if e.get("rsi_zone") != rsi_zone:
                 continue
@@ -148,9 +154,9 @@ class TradeMemory:
         if not relevant_exps:
             return False  # Sin experiencia, probar suerte
 
-        # Calcular win rate ponderado
+        # Calcular win rate ponderado - Solo experiencias con outcome
         total_weight = sum(w for _, w in relevant_exps)
-        weighted_wins = sum(w for e, w in relevant_exps if e["outcome"] == "WIN")
+        weighted_wins = sum(w for e, w in relevant_exps if "outcome" in e and e["outcome"] == "WIN")
         weighted_win_rate = weighted_wins / total_weight if total_weight > 0 else 0
         
         total_experiences = len(relevant_exps)
@@ -212,7 +218,9 @@ class TradeMemory:
             
         # Agrupar por condiciones
         conditions = {}
-        for exp in self.experiences:
+        # Solo procesar experiencias válidas
+        valid_exps = [e for e in self.experiences if "outcome" in e and "pnl" in e and "context" in e]
+        for exp in valid_exps:
             key = f"{exp['context']['trend']}_{exp['context']['volatility']}_{exp.get('rsi_zone', 'UNKNOWN')}"
             if key not in conditions:
                 conditions[key] = {"wins": 0, "total": 0, "pnl": 0}
@@ -264,19 +272,21 @@ class TradeMemory:
         
         # Calcular métricas globales
         total = len(self.experiences)
-        wins = [e for e in self.experiences if e["outcome"] == "WIN"]
-        losses = [e for e in self.experiences if e["outcome"] == "LOSS"]
-        win_rate = (len(wins) / total) * 100 if total > 0 else 0
+        # Filtrar solo experiencias válidas con campo 'outcome'
+        valid_experiences = [e for e in self.experiences if "outcome" in e and "pnl" in e]
+        wins = [e for e in valid_experiences if e["outcome"] == "WIN"]
+        losses = [e for e in valid_experiences if e["outcome"] == "LOSS"]
+        win_rate = (len(wins) / len(valid_experiences)) * 100 if valid_experiences else 0
         
         # Gross Profit/Loss & Profit Factor
         gross_profit = sum(e["pnl"] for e in wins)
         gross_loss = abs(sum(e["pnl"] for e in losses))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
         
-        # Cumulative PnL for Chart
+        # Cumulative PnL for Chart - Only use valid experiences
         cumulative_pnl = []
         running_pnl = 0
-        for i, exp in enumerate(self.experiences):
+        for i, exp in enumerate(valid_experiences):
             running_pnl += exp["pnl"]
             cumulative_pnl.append({
                 "trade": i + 1,
@@ -284,15 +294,17 @@ class TradeMemory:
                 "outcome": exp["outcome"]
             })
 
-        # Últimos 10 trades
-        recent_10 = self.experiences[-10:]
+        # Últimos 10 trades válidos
+        recent_10 = valid_experiences[-10:] if valid_experiences else []
         
         # PnL promedio
-        avg_pnl = sum(e["pnl"] for e in self.experiences) / total
+        avg_pnl = sum(e["pnl"] for e in valid_experiences) / len(valid_experiences) if valid_experiences else 0
         
-        # Mejor y peor contexto (por win rate)
+        # Mejor y peor contexto (por win rate) - Solo experiencias válidas
         contexts = {}
-        for exp in self.experiences:
+        for exp in valid_experiences:
+            if "context" not in exp:
+                continue
             key = f"{exp['context']['trend']}_{exp['context']['volatility']}"
             if key not in contexts:
                 contexts[key] = {"wins": 0, "total": 0, "pnl": 0}
@@ -344,9 +356,9 @@ class TradeMemory:
             "cumulative_pnl": cumulative_pnl,
             "recent_trades": [
                 {
-                    "outcome": e["outcome"],
-                    "pnl": round(e["pnl"], 2),
-                    "context": f"{e['context']['trend']}/{e['context']['volatility']}"
+                    "outcome": e.get("outcome", "UNKNOWN"),
+                    "pnl": round(e.get("pnl", 0), 2),
+                    "context": f"{e.get('context', {}).get('trend', 'N/A')}/{e.get('context', {}).get('volatility', 'N/A')}"
                 } for e in recent_10
             ],
             "best_context": context_stats[0] if context_stats else None,

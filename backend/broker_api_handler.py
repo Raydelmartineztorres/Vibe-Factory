@@ -28,12 +28,8 @@ _simulated_balance = {
 
 _trade_counter = 1000
 
-# Tracking de posición actual
-_current_position = {
-    "size": 0.0,           # Cantidad de BTC
-    "entry_price": 0.0,    # Precio de entrada
-    "is_open": False       # Si hay posición abierta
-}
+# Tracking de posiciones por símbolo
+_positions = {} # {"BTC/USDT": {"size": 0.5, "entry_price": 90000, "is_open": True}}
 
 # Cache para la instancia del exchange
 _exchange_instance = None
@@ -111,7 +107,7 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
     """
     Envía la orden al broker configurado o la simula.
     """
-    global _simulated_balance, _trade_counter, _current_position
+    global _simulated_balance, _trade_counter, _positions
     
     symbol = payload["symbol"].replace("_", "/") # Convertir BTC_USDT a BTC/USDT
     side = payload["side"]
@@ -123,7 +119,8 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
     # --- MODO DEMO (PAPER) ---
     if mode == "demo":
         # Precio simulado (usaremos uno realista)
-        current_price = 90000 + random.uniform(-500, 500)
+        # FIX: Usar precio real del símbolo, no hardcodeado a BTC
+        current_price = await get_current_price(symbol, mode="demo")
         
         # Initialize balance for this currency if it doesn't exist
         if base_currency not in _simulated_balance:
@@ -137,20 +134,39 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
                 _simulated_balance[base_currency] += size
                 _trade_counter += 1
                 
-                # Actualizar posición
-                _current_position["size"] = _simulated_balance[base_currency]
-                _current_position["entry_price"] = current_price
-                _current_position["is_open"] = True
+                # Actualizar posición para este símbolo
+                if symbol not in _positions:
+                    _positions[symbol] = {"size": 0.0, "entry_price": 0.0, "is_open": False}
                 
-                # Registrar en trade tracker
-                from trade_tracker import get_tracker
-                tracker = get_tracker()
-                tracker.open_trade(size, current_price, "LONG", symbol=symbol)
+                # Calcular nuevo precio promedio si ya hay posición
+                current_pos = _positions[symbol]
+                if current_pos["size"] > 0:
+                    total_cost = (current_pos["size"] * current_pos["entry_price"]) + cost
+                    new_size = current_pos["size"] + size
+                    _positions[symbol]["entry_price"] = total_cost / new_size
+                    _positions[symbol]["size"] = new_size
+                else:
+                    _positions[symbol]["entry_price"] = current_price
+                    _positions[symbol]["size"] = size
+                
+                _positions[symbol]["is_open"] = True
+                
+                _positions[symbol]["is_open"] = True
+                
+                # Registrar en trade tracker - MOVED TO RISK STRATEGY
+                # from trade_tracker import get_tracker
+                # tracker = get_tracker()
+                
+                # Use consistent ID format
+                trade_id = f"SIM-{_trade_counter}"
+                
+                # Open trade in tracker - REMOVED
+                # tracker.open_trade(size, current_price, "LONG", symbol=symbol, trade_id=trade_id)
                 
                 print(f"[SIMULATED] ✅ COMPRA ejecutada: {size} {base_currency} @ ${current_price:.2f}")
                 return {
                     "status": "FILLED",
-                    "id": f"SIM-{_trade_counter}",
+                    "id": trade_id,
                     "price": current_price,
                     "details": {"side": "BUY", "amount": size, "cost": cost, "price": current_price, "symbol": symbol}
                 }
@@ -171,19 +187,36 @@ async def execute_order(payload: OrderPayload, mode: Literal["demo", "testnet", 
             _trade_counter += 1
             
             # Actualizar posición
-            _current_position["size"] = _simulated_balance[base_currency]
-            _current_position["is_open"] = True # Mantenemos abierto si es short
+            if symbol not in _positions:
+                _positions[symbol] = {"size": 0.0, "entry_price": 0.0, "is_open": False}
+                
+            # Reducir posición (FIFO simplificado)
+            current_pos = _positions[symbol]
+            new_size = current_pos["size"] - size
+            if new_size <= 0.000001: # Close if negligible
+                new_size = 0.0
+                current_pos["is_open"] = False
+                current_pos["entry_price"] = 0.0
             
-            # Registrar en trade tracker
-            from trade_tracker import get_tracker
-            tracker = get_tracker()
-            # Para short, el PnL se calcula al cerrar, aquí solo abrimos
-            tracker.open_trade(size, current_price, "SHORT", symbol=symbol)
+            current_pos["size"] = new_size
+            _positions[symbol] = current_pos
+            
+            _positions[symbol] = current_pos
+            
+            # Registrar en trade tracker - MOVED TO RISK STRATEGY
+            # from trade_tracker import get_tracker
+            # tracker = get_tracker()
+            
+            # Use consistent ID format
+            trade_id = f"SIM-{_trade_counter}"
+            
+            # Para short, el PnL se calcula al cerrar, aquí solo abrimos - REMOVED
+            # tracker.open_trade(size, current_price, "SHORT", symbol=symbol, trade_id=trade_id)
             
             print(f"[SIMULATED] ✅ VENTA (SHORT) ejecutada: {size} {base_currency} @ ${current_price:.2f}")
             return {
                 "status": "FILLED",
-                "id": f"SIM-{_trade_counter}",
+                "id": trade_id,
                 "price": current_price,
                 "details": {"side": "SELL", "amount": size, "proceeds": proceeds, "price": current_price, "symbol": symbol}
             }
@@ -257,7 +290,7 @@ async def get_current_price(symbol: str, mode: Literal["demo", "real"] = "demo")
         price = float(ticker['last'])
         
         if mode == "demo":
-            print(f"[DEMO-REAL-PRICE] 📊 BTC/USDT: ${price:.2f} (Binance Live)")
+            print(f"[DEMO-REAL-PRICE] 📊 {symbol}: ${price:.2f} (Binance Live)")
         
         return price
         
@@ -299,7 +332,7 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
     """
     Cierra inmediatamente toda la posición del activo base (vende todo a mercado).
     """
-    global _simulated_balance, _trade_counter, _current_position
+    global _simulated_balance, _trade_counter, _positions
     
     # Normalizar símbolo (ej: BTC_USDT -> BTC/USDT)
     normalized_symbol = symbol.replace("_", "/")
@@ -307,11 +340,34 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
     
     if mode == "demo":
         amount = _simulated_balance.get(base_asset, 0.0)
+        
+        # Sync with TradeTracker FIRST to handle ghost trades
+        from trade_tracker import get_tracker
+        tracker = get_tracker()
+        active_trades = tracker.get_active_trades()
+        closed_ghosts = 0
+        
+        # We use a current price for closing
+        # FIX: Usar precio real del símbolo
+        current_price = await get_current_price(normalized_symbol, mode="demo")
+        
+        for trade in active_trades:
+            if trade["symbol"] == normalized_symbol:
+                tracker.close_trade(trade["id"], current_price)
+                closed_ghosts += 1
+                print(f"[SIMULATED] 🔄 Tracker synced: Closed trade #{trade['id']}")
+
         if amount <= 0:
+            if closed_ghosts > 0:
+                return {
+                    "status": "FILLED",
+                    "id": f"SIM-GHOST-CLOSE-{_trade_counter}",
+                    "price": current_price,
+                    "details": {"side": "SELL", "amount": 0, "cost": 0, "type": "CLOSE_GHOST_TRADES", "closed_count": closed_ghosts}
+                }
             return {"status": "FAILED", "message": "No position to close"}
             
         # Simular venta de todo
-        current_price = 90000 + random.uniform(-500, 500)
         proceeds = amount * current_price
         
         _simulated_balance[base_asset] = 0.0
@@ -319,9 +375,8 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
         _trade_counter += 1
         
         # Resetear posición
-        _current_position["size"] = 0.0
-        _current_position["entry_price"] = 0.0
-        _current_position["is_open"] = False
+        if normalized_symbol in _positions:
+            _positions[normalized_symbol] = {"size": 0.0, "entry_price": 0.0, "is_open": False}
         
         print(f"[SIMULATED] 🚨 CLOSE POSITION: Sold {amount} {base_asset} @ ${current_price:.2f}")
         return {
@@ -356,10 +411,21 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
             )
             
             print(f"[REAL] ✅ Posición cerrada: {order['id']}")
+            # Sync with TradeTracker
+            from trade_tracker import get_tracker
+            tracker = get_tracker()
+            active_trades = tracker.get_active_trades()
+            exit_price = order.get('price') or order.get('average') or 0.0
+            
+            for trade in active_trades:
+                if trade["symbol"] == normalized_symbol:
+                    tracker.close_trade(trade["id"], exit_price)
+                    print(f"[REAL] 🔄 Tracker synced: Closed trade #{trade['id']}")
+
             return {
                 "status": "FILLED",
                 "id": str(order['id']),
-                "price": order.get('price') or order.get('average') or 0.0,
+                "price": exit_price,
                 "details": order
             }
             
@@ -374,38 +440,42 @@ async def close_connection():
         await _exchange_instance.close()
         _exchange_instance = None
 
-async def get_current_position(current_price: float) -> dict:
+async def get_current_position(current_price: float, symbol: str = "BTC/USDT") -> dict:
     """
     Obtiene la posición actual y calcula el PnL no realizado.
     
     Args:
         current_price: Precio actual del activo
+        symbol: Símbolo a consultar
         
     Returns:
         dict con: is_open, size, entry_price, current_price, unrealized_pnl_usd, unrealized_pnl_pct
     """
-    global _current_position
+    global _positions
     
-    if not _current_position["is_open"] or _current_position["size"] <= 0:
+    position = _positions.get(symbol, {"size": 0.0, "entry_price": 0.0, "is_open": False})
+    
+    if not position["is_open"] or position["size"] == 0:
         return {
             "is_open": False,
             "size": 0.0,
             "entry_price": 0.0,
             "current_price": current_price,
-           "unrealized_pnl_usd": 0.0,
+            "unrealized_pnl_usd": 0.0,
             "unrealized_pnl_pct": 0.0
         }
     
     # Calcular PnL no realizado
-    entry_value = _current_position["size"] * _current_position["entry_price"]
-    current_value = _current_position["size"] * current_price
+    entry_value = position["size"] * position["entry_price"]
+    current_value = position["size"] * current_price
+    
     unrealized_pnl_usd = current_value - entry_value
-    unrealized_pnl_pct = (unrealized_pnl_usd / entry_value) * 100 if entry_value > 0 else 0.0
+    unrealized_pnl_pct = (unrealized_pnl_usd / abs(entry_value)) * 100 if entry_value != 0 else 0.0
     
     return {
         "is_open": True,
-        "size": _current_position["size"],
-        "entry_price": _current_position["entry_price"],
+        "size": position["size"],
+        "entry_price": position["entry_price"],
         "current_price": current_price,
         "unrealized_pnl_usd": unrealized_pnl_usd,
         "unrealized_pnl_pct": unrealized_pnl_pct

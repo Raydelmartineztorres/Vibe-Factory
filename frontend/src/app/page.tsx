@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries, LineSeries, AreaSeries, HistogramSeries } from 'lightweight-charts';
+import PositionsTable from '@/components/PositionsTable';
 
 const steps = [
   {
@@ -40,15 +41,15 @@ export default function Home() {
   const [pnl, setPnl] = useState<{
     realized_pnl: number;
     unrealized_pnl: number;
+    total_pnl?: number;
+    positions?: any[];
     position_size: number;
     entry_price: number;
     current_price: number;
   } | null>(null);
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [trades, setTrades] = useState<any[]>([]);
-  const [balance, setBalance] = useState<{ USDT: number, BTC: number, mode?: string } | null>(null);
   const lastTrade = trades.length > 0 ? trades[trades.length - 1] : null;
-  const [tradingEnabled, setTradingEnabled] = useState(true);
   const [memoryStats, setMemoryStats] = useState<any>(null);
   const [priceHistory, setPriceHistory] = useState<{ time: number, price: number }[]>([]);
   const [currentRSI, setCurrentRSI] = useState<number | null>(null);
@@ -61,11 +62,15 @@ export default function Home() {
   const [marketStatus, setMarketStatus] = useState<any>(null);
   const [riskStats, setRiskStats] = useState<any>(null);
   const [systemHealth, setSystemHealth] = useState<any>(null);
+  const [tradingEnabled, setTradingEnabled] = useState(false);
+  const [tradingMode, setTradingMode] = useState("demo");
+  // Removed duplicate symbol state - using selectedSymbol instead
+  const [balance, setBalance] = useState<any>(null);
+  const [position, setPosition] = useState<any>(null);
+  const [activeTrades, setActiveTrades] = useState<any[]>([]);
   const [trainingInProgress, setTrainingInProgress] = useState(false);
   const [sentiment, setSentiment] = useState<any>(null);
   const [aiAdvice, setAiAdvice] = useState<any>(null);
-  const [position, setPosition] = useState<any>(null);
-  const [activeTrades, setActiveTrades] = useState<any[]>([]);
 
   // 🐱 EL GATO Intelligence States
   const [elGatoStatus, setElGatoStatus] = useState<any>(null);
@@ -74,7 +79,6 @@ export default function Home() {
 
   // Symbol Selection
   const [selectedSymbol, setSelectedSymbol] = useState("BTC/USDT");
-  const [tradingMode, setTradingMode] = useState("demo"); // demo, testnet, real
 
   // Trading Configuration
   const [tradeSize, setTradeSize] = useState(0.001);
@@ -89,10 +93,16 @@ export default function Home() {
   const rsiSeriesRef = useRef<any>(null);
   const atrSeriesRef = useRef<any>(null);
   const macdSeriesRef = useRef<any>(null);
+  const upperGhostRef = useRef<any>(null);
+  const lowerGhostRef = useRef<any>(null);
+  const isChartInitialized = useRef(false);
 
   // Timeframe Selection
   const [selectedTimeframe, setSelectedTimeframe] = useState('5m');
   const TIMEFRAMES = [
+    { value: '1s', label: '1s' },
+    { value: '5s', label: '5s' },
+    { value: '15s', label: '15s' },
     { value: '1m', label: '1m' },
     { value: '5m', label: '5m' },
     { value: '15m', label: '15m' },
@@ -122,6 +132,8 @@ export default function Home() {
   };
 
   const executeTrade = async (side: "BUY" | "SELL") => {
+    console.log(`[TRADE] Executing ${side} trade...`);
+
     // Calculate trade details
     const currentPrice = livePrice || 86000;
     const totalCost = tradeSize * currentPrice;
@@ -141,21 +153,31 @@ export default function Home() {
       (takeProfitEnabled ? `Take Profit: $${tpPrice?.toFixed(2)} (+${takeProfitPercent}%)\n` : '') +
       `\n¿Ejecutar orden?`;
 
-    if (!confirm(confirmMsg)) return;
+    if (!confirm(confirmMsg)) {
+      console.log("[TRADE] User cancelled");
+      return;
+    }
 
     try {
+      console.log(`[TRADE] Sending request to /api/trade...`);
+      const payload = {
+        symbol: selectedSymbol.replace("/", "_"),
+        side: side,
+        size: tradeSize,
+        stop_loss: slPrice,
+        take_profit: tpPrice,
+      };
+      console.log(`[TRADE] Payload:`, payload);
+
       const res = await fetch("/api/trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: selectedSymbol.replace("/", "_"),
-          side: side,
-          size: tradeSize,
-          stop_loss: slPrice,
-          take_profit: tpPrice,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      console.log(`[TRADE] Response status:`, res.status);
       const data = await res.json();
+      console.log(`[TRADE] Response data:`, data);
 
       // Verificar si la orden fue exitosa
       if (data.status === "FILLED" || data.status === "SIMULATED") {
@@ -166,6 +188,7 @@ export default function Home() {
         alert(`⚠️ Respuesta: ${data.status || data.message || 'Unknown'}`);
       }
     } catch (error) {
+      console.error("[TRADE] Error:", error);
       alert("❌ Error de conexión con el backend");
     }
   };
@@ -245,23 +268,120 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  // Reset chart initialization when symbol or timeframe changes
   useEffect(() => {
-    const fetchPrice = async () => {
+    isChartInitialized.current = false;
+  }, [selectedSymbol, selectedTimeframe]);
+
+  useEffect(() => {
+    // Connect to Binance WebSocket for real-time price updates
+    const symbolFormatted = selectedSymbol.replace('/', '').toLowerCase(); // BTC/USDT -> btcusdt
+    const wsUrl = `wss://stream.binance.com:9443/ws/${symbolFormatted}@trade`;
+
+    console.log(`[WEBSOCKET] Connecting to ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log(`[WEBSOCKET] ✅ Connected to Binance for ${selectedSymbol}`);
+    };
+
+    ws.onmessage = (event) => {
       try {
-        const res = await fetch("/api/price");
-        if (res.ok) {
-          const data = await res.json();
-          setLivePrice(data.price);
+        const data = JSON.parse(event.data);
+        // Binance sends: { e: "trade", s: "BTCUSDT", p: "91337.50", ... }
+        const price = parseFloat(data.p);
+        if (price > 0) {
+          setLivePrice(price);
         }
       } catch (error) {
-        // Silently fail
+        console.error('[WEBSOCKET] Parse error:', error);
       }
     };
 
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 1000); // Update every second
-    return () => clearInterval(interval);
+    ws.onerror = (error) => {
+      console.error('[WEBSOCKET] ❌ Error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('[WEBSOCKET] 🔌 Disconnected');
+    };
+
+    // Cleanup on unmount or symbol change
+    return () => {
+      ws.close();
+    };
   }, [selectedSymbol]);
+
+  // Real-time candle updates via WebSocket
+  useEffect(() => {
+    if (!candlestickSeriesRef.current) return;
+
+    // Map timeframe to Binance interval format
+    const intervalMap: Record<string, string> = {
+      '1s': '1s',
+      '5s': '5s', // Note: Binance may not support all second intervals
+      '15s': '15s',
+      '1m': '1m',
+      '5m': '5m',
+      '15m': '15m',
+      '1h': '1h',
+      '4h': '4h',
+      '1d': '1d',
+      '1w': '1w',
+      '1M': '1M'
+    };
+
+    const binanceInterval = intervalMap[selectedTimeframe] || '5m';
+    const symbolFormatted = selectedSymbol.replace('/', '').toLowerCase();
+    const wsUrl = `wss://stream.binance.com:9443/ws/${symbolFormatted}@kline_${binanceInterval}`;
+
+    console.log(`[WEBSOCKET CANDLES] Connecting to ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log(`[WEBSOCKET CANDLES] ✅ Connected for ${selectedSymbol} ${selectedTimeframe}`);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const kline = data.k;
+
+        if (!kline) return;
+
+        // Create candle object from Binance kline
+        const newCandle = {
+          time: Math.floor(kline.t / 1000), // Convert ms to seconds
+          open: parseFloat(kline.o),
+          high: parseFloat(kline.h),
+          low: parseFloat(kline.l),
+          close: parseFloat(kline.c),
+          volume: parseFloat(kline.v)
+        };
+
+        // Update the last candle in real-time
+        if (candlestickSeriesRef.current) {
+          candlestickSeriesRef.current.update(newCandle);
+        }
+
+      } catch (error) {
+        console.error('[WEBSOCKET CANDLES] Parse error:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('[WEBSOCKET CANDLES] ❌ Error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('[WEBSOCKET CANDLES] 🔌 Disconnected');
+    };
+
+    // Cleanup
+    return () => {
+      ws.close();
+    };
+  }, [selectedSymbol, selectedTimeframe]);
 
   useEffect(() => {
     const fetchTrades = async () => {
@@ -480,12 +600,46 @@ export default function Home() {
 
     const fetchCandles = async () => {
       try {
-        const res = await fetch(`/api/candles?timeframe=${selectedTimeframe}`);
+        // Map timeframe to Binance interval format
+        const intervalMap: Record<string, string> = {
+          '1s': '1s',
+          '5s': '5s',
+          '15s': '15s',
+          '1m': '1m',
+          '5m': '5m',
+          '15m': '15m',
+          '1h': '1h',
+          '4h': '4h',
+          '1d': '1d',
+          '1w': '1w',
+          '1M': '1M'
+        };
+
+        const binanceInterval = intervalMap[selectedTimeframe] || '5m';
+        const symbolFormatted = selectedSymbol.replace('/', ''); // BTC/USDT -> BTCUSDT
+
+        // Fetch directly from Binance API (public, no auth needed)
+        const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbolFormatted}&interval=${binanceInterval}&limit=1000`;
+
+        const res = await fetch(binanceUrl);
+
         if (res.ok) {
           const data = await res.json();
-          if (candlestickSeriesRef.current && data.candles.length > 0) {
+
+          // Transform Binance klines to our format
+          // Binance returns: [timestamp, open, high, low, close, volume, ...]
+          const candles = data.map((kline: any) => ({
+            time: Math.floor(kline[0] / 1000), // Convert ms to seconds
+            open: parseFloat(kline[1]),
+            high: parseFloat(kline[2]),
+            low: parseFloat(kline[3]),
+            close: parseFloat(kline[4]),
+            volume: parseFloat(kline[5])
+          }));
+
+          if (candlestickSeriesRef.current && candles.length > 0) {
             // Eliminar duplicados de tiempo para evitar errores de lightweight-charts
-            const uniqueCandles = data.candles.reduce((acc: any[], current: any) => {
+            const uniqueCandles = candles.reduce((acc: any[], current: any) => {
               const x = acc.find((item: any) => item.time === current.time);
               if (!x) {
                 return acc.concat([current]);
@@ -496,36 +650,74 @@ export default function Home() {
 
             candlestickSeriesRef.current.setData(uniqueCandles);
 
-            // Force auto-scaling to fit new data range
-            if (chartRef.current) {
-              chartRef.current.priceScale('right').applyOptions({
-                autoScale: true,
-              });
+            // Control zoom para prevenir velas enormes con pocos datos
+            if (chartRef.current && uniqueCandles.length > 0) {
+              // Only apply auto-scaling if this is the first load for this symbol/timeframe
+              if (!isChartInitialized.current) {
+                // 1. Time Scale Logic
+                // 1. Time Scale Logic
+                if (uniqueCandles.length <= 50) {
+                  const lastCandle = uniqueCandles[uniqueCandles.length - 1];
+
+                  // Calculate dynamic range based on timeframe
+                  let rangeSeconds = 3600 * 2; // Default 2h
+                  if (selectedTimeframe.endsWith('s')) {
+                    rangeSeconds = 300; // 5 mins for seconds timeframes
+                  } else if (selectedTimeframe === '1m') {
+                    rangeSeconds = 1800; // 30 mins
+                  }
+
+                  chartRef.current.timeScale().setVisibleRange({
+                    from: (lastCandle.time - rangeSeconds) as any,
+                    to: (lastCandle.time + (rangeSeconds / 10)) as any,
+                  });
+                } else {
+                  chartRef.current.timeScale().fitContent();
+                }
+
+                // 2. Price Scale Logic - FIX PARA CANDELONES
+                const allPrices = uniqueCandles.flatMap((c: any) => [c.open, c.high, c.low, c.close]);
+                const minPrice = Math.min(...allPrices);
+                const maxPrice = Math.max(...allPrices);
+                const priceRange = maxPrice - minPrice;
+                const avgPrice = (minPrice + maxPrice) / 2;
+
+                // CRITICAL FIX: Asegurar rango mínimo de 0.5% para evitar candles enormes
+                const minRequiredRange = avgPrice * 0.005; // 0.5% del precio promedio
+
+                if (priceRange < minRequiredRange) {
+                  // Rango muy pequeño - ajustar márgenes para que las velas se vean normales
+                  console.log(`[CHART FIX] Precio muy plano (rango: ${priceRange.toFixed(2)}), aplicando márgenes del 30%`);
+                  chartRef.current.priceScale('right').applyOptions({
+                    autoScale: true,
+                    scaleMargins: { top: 0.3, bottom: 0.3 } // Márgenes grandes para datos planos
+                  });
+                } else {
+                  // Rango normal - márgenes estándar
+                  chartRef.current.priceScale('right').applyOptions({
+                    autoScale: true,
+                    scaleMargins: { top: 0.1, bottom: 0.1 }
+                  });
+                }
+
+                isChartInitialized.current = true;
+              }
             }
 
-            // Agregar marcadores de trades
-            const markers = data.trades.map((t: any) => {
-              // Ajustar tiempo del trade al inicio de la vela de 5s correspondiente
-              const tradeTime = Math.floor(t.time);
-              const candleTime = tradeTime - (tradeTime % 5);
+            // Note: Trade markers are no longer fetched from backend
+            // If you want to keep your own trades displayed, we'd need to fetch them separately
 
-              // 🐱 auto or 👤 manual
-              const icon = t.source === 'auto' ? '🐱' : '👤';
-              const label = t.side === 'BUY' ? 'BUY' : 'SELL';
-
-              return {
-                time: candleTime,
-                position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
-                color: t.side === 'BUY' ? '#22c55e' : '#ef4444',
-                shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
-                text: `${icon} ${label}`, // Show icon + side
-              };
-            });
-            candlestickSeriesRef.current.setMarkers(markers);
+            // 👻 Update Ghost Series to force min 0.5% range
+            if (upperGhostRef.current && lowerGhostRef.current) {
+              const upperData = uniqueCandles.map((c: any) => ({ time: c.time, value: c.high * 1.0025 }));
+              const lowerData = uniqueCandles.map((c: any) => ({ time: c.time, value: c.low * 0.9975 }));
+              upperGhostRef.current.setData(upperData);
+              lowerGhostRef.current.setData(lowerData);
+            }
           }
         }
       } catch (error) {
-        // Silently fail
+        console.error('[BINANCE API] Error fetching candles:', error);
       }
     };
 
@@ -610,6 +802,7 @@ export default function Home() {
     chartContainerRef.current.innerHTML = '';
 
     const chart = createChart(chartContainerRef.current, {
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: '#131722' }, // Standard TV Dark Background
         textColor: '#D9D9D9', // Brighter text for visibility
@@ -620,24 +813,45 @@ export default function Home() {
         vertLines: { color: '#2B2B43', style: 1, visible: true },
         horzLines: { color: '#2B2B43', style: 1, visible: true },
       },
-      width: chartContainerRef.current.clientWidth,
       height: 550,
       timeScale: {
         timeVisible: true,
-        secondsVisible: false,
+        secondsVisible: selectedTimeframe.endsWith('s'), // Show seconds for 1s, 5s, 15s
         borderColor: '#2B2B43',
         borderVisible: true,
-        rightOffset: 12,
-        barSpacing: 12,
-        minBarSpacing: 2,
+        rightOffset: 10,
+        barSpacing: 0.15,
+        minBarSpacing: 0.05,
         fixLeftEdge: false,
         fixRightEdge: false,
+        lockVisibleTimeRangeOnResize: true,
         visible: true,
+        tickMarkMaxCharacterLength: 8, // Force more frequent time labels
+        ticksVisible: true,
         tickMarkFormatter: (time: number, tickMarkType: number, locale: string) => {
           const date = new Date(time * 1000);
-          // Format based on tickMarkType (Year, Month, Day, Time, TimeWithSeconds)
-          // Simple fallback: HH:mm for intraday
-          return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+          const hours = date.getHours().toString().padStart(2, '0');
+          const minutes = date.getMinutes().toString().padStart(2, '0');
+          const seconds = date.getSeconds().toString().padStart(2, '0');
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+
+          // tickMarkType: 0=Year, 1=Month, 2=DayOfMonth, 3=Time, 4=TimeWithSeconds
+          if (tickMarkType === 0) return date.getFullYear().toString();
+          if (tickMarkType === 1) return date.toLocaleDateString(locale, { month: 'short' });
+          if (tickMarkType === 2) return `${day}/${month}`;
+
+          // Dynamic time format based on selected timeframe
+          if (selectedTimeframe.endsWith('s')) {
+            // For seconds timeframes (1s, 5s, 15s): show HH:MM:SS
+            return `${hours}:${minutes}:${seconds}`;
+          } else if (selectedTimeframe.endsWith('m') || selectedTimeframe.endsWith('h')) {
+            // For minutes/hours (1m, 5m, 1h, 4h): show HH:MM
+            return `${hours}:${minutes}`;
+          } else {
+            // For days/weeks/months: show date
+            return `${day}/${month}`;
+          }
         },
       },
       localization: {
@@ -648,13 +862,15 @@ export default function Home() {
         borderColor: '#2B2B43',
         borderVisible: true,
         scaleMargins: {
-          top: 0.2,
-          bottom: 0.2,
+          top: 0.1,
+          bottom: 0.1,
         },
         mode: 1,
-        autoScale: false,
+        autoScale: true,
         visible: true,
         alignLabels: true,
+        entireTextOnly: false,
+        ticksVisible: true,
       },
       crosshair: {
         mode: 1,
@@ -694,79 +910,48 @@ export default function Home() {
       wickUpColor: '#089981',
       wickDownColor: '#F23645',
       priceScaleId: 'right',
-    });
-
-    // RSI Area - separate scale with gradient shadow
-    const rsiSeries = chart.addSeries(AreaSeries, {
-      topColor: 'rgba(168, 85, 247, 0.4)', // Purple with transparency
-      bottomColor: 'rgba(168, 85, 247, 0)', // Fully transparent at bottom
-      lineColor: '#a855f7', // Solid purple line
-      lineWidth: 3,
-      priceScaleId: 'rsi',
-      lastValueVisible: false,
-      priceLineVisible: false,
-      crosshairMarkerVisible: true,
-      crosshairMarkerRadius: 6,
-    });
-
-    // Configure RSI scale (0-100)
-    chart.priceScale('rsi').applyOptions({
-      scaleMargins: {
-        top: 0.02,
-        bottom: 0.78,
-      },
-      borderVisible: false,
-    });
-
-    // ATR Area - separate scale with gradient shadow (BLUE)
-    const atrSeries = chart.addSeries(AreaSeries, {
-      topColor: 'rgba(59, 130, 246, 0.4)', // Blue with transparency
-      bottomColor: 'rgba(59, 130, 246, 0)', // Fully transparent at bottom
-      lineColor: '#3b82f6', // Solid blue line
-      lineWidth: 3,
-      priceScaleId: 'atr',
-      lastValueVisible: false,
-      priceLineVisible: false,
-      crosshairMarkerVisible: true,
-      crosshairMarkerRadius: 6,
-    });
-
-    // Configure ATR scale
-    chart.priceScale('atr').applyOptions({
-      scaleMargins: {
-        top: 0.82,
-        bottom: 0.12,
-      },
-      borderVisible: false,
-    });
-
-    // MACD Histogram - separate scale
-    const macdSeries = chart.addSeries(HistogramSeries, {
-      color: '#26a69a',
-      priceScaleId: 'macd',
+      priceLineVisible: true,    // Show current price line like Binance
+      priceLineWidth: 2,
+      priceLineStyle: 0,         // Solid line
+      lastValueVisible: true,    // Show price label on right axis
       priceFormat: {
         type: 'price',
         precision: 2,
         minMove: 0.01,
       },
-      lastValueVisible: false,
-      priceLineVisible: false,
     });
 
-    // Configure MACD scale
-    chart.priceScale('macd').applyOptions({
-      scaleMargins: {
-        top: 0.92,
-        bottom: 0.02,
-      },
-      borderVisible: false,
-    });
+    // === INDICADORES: SOLO VALORES NUMÉRICOS ===
+    // NO se dibujan en el gráfico para mantenerlo limpio
+    // Los valores se muestran como números/porcentajes debajo del gráfico
 
     chartRef.current = chart;
     candlestickSeriesRef.current = candlestickSeries;
-    rsiSeriesRef.current = rsiSeries;
-    atrSeriesRef.current = atrSeries;
-    macdSeriesRef.current = macdSeries;
+
+    // Set refs to null - no indicator lines on chart
+    rsiSeriesRef.current = null;
+    atrSeriesRef.current = null;
+    macdSeriesRef.current = null;
+
+    // 👻 Ghost Series for Minimum Scale (Invisible)
+    const upperGhost = chart.addSeries(LineSeries, {
+      color: 'rgba(0,0,0,0)', // Transparent
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+      lineWidth: 1,
+      priceScaleId: 'right',
+    });
+    const lowerGhost = chart.addSeries(LineSeries, {
+      color: 'rgba(0,0,0,0)', // Transparent
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+      lineWidth: 1,
+      priceScaleId: 'right',
+    });
+    upperGhostRef.current = upperGhost;
+    lowerGhostRef.current = lowerGhost;
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -892,16 +1077,33 @@ export default function Home() {
 
               <button
                 onClick={async () => {
-                  if (!confirm("⚠️ ¿ESTÁS SEGURO? Esto venderá TODO tu BTC al precio de mercado actual.")) return;
+                  if (!confirm("⚠️ ¿ESTÁS SEGURO? Esto venderá TODAS tus posiciones al precio de mercado actual.")) return;
                   try {
-                    const res = await fetch('/api/trade/close', {
+                    const res = await fetch('/api/trades/close_all', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ symbol: "BTC_USDT" }),
+                      body: JSON.stringify({}),
                     });
                     const data = await res.json();
-                    if (data.status === "FILLED" || data.status === "SIMULATED") {
-                      alert(`✅ POSICIÓN CERRADA\nPrecio: $${data.price}\nID: ${data.id}`);
+                    if (data.status === "COMPLETED") {
+                      const count = data.results.length;
+                      alert(`✅ ${count} POSICIONES CERRADAS`);
+
+                      // 🔄 IMMEDIATE UI REFRESH - Direct API calls
+                      setTimeout(async () => {
+                        try {
+                          const [tradesRes, pnlRes, balanceRes] = await Promise.all([
+                            fetch('/api/trades/active'),
+                            fetch('/api/pnl'),
+                            fetch('/api/balance')
+                          ]);
+                          if (tradesRes.ok) setActiveTrades(await tradesRes.json());
+                          if (pnlRes.ok) setPnl(await pnlRes.json());
+                          if (balanceRes.ok) setBalance(await balanceRes.json());
+                        } catch (e) {
+                          console.error('Failed to refresh UI:', e);
+                        }
+                      }, 100);
                     } else {
                       alert(`❌ Error: ${data.message || "No se pudo cerrar"}`);
                     }
@@ -910,7 +1112,7 @@ export default function Home() {
                   }
                 }}
                 className="rounded-full bg-orange-600 px-6 py-3 font-bold text-white transition hover:bg-orange-700 flex items-center gap-2"
-                title="Vender todo el BTC inmediatamente (PÁNICO)"
+                title="Vender TODO inmediatamente (PÁNICO)"
               >
                 🚨 CLOSE ALL
               </button>
@@ -926,9 +1128,9 @@ export default function Home() {
               </p>
             </div>
             <div className="rounded-xl bg-black/20 p-4">
-              <p className="text-sm text-gray-400 mb-1 font-medium">Balance BTC</p>
+              <p className="text-sm text-gray-400 mb-1 font-medium">Balance {selectedSymbol.split('/')[0]}</p>
               <p className="text-2xl font-mono text-yellow-400">
-                {balance?.BTC.toFixed(6) || '---'}
+                {balance?.[selectedSymbol.split('/')[0]]?.toFixed(6) || '---'}
               </p>
             </div>
             <div className="rounded-xl bg-black/20 p-4">
@@ -1108,8 +1310,8 @@ export default function Home() {
                   key={tf.value}
                   onClick={() => setSelectedTimeframe(tf.value)}
                   className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${selectedTimeframe === tf.value
-                      ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50'
-                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50'
+                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
                     }`}
                 >
                   {tf.label}
@@ -1218,6 +1420,40 @@ export default function Home() {
 
               {/* Symbol Selector */}
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur space-y-4">
+
+                {/* Symbol Selector */}
+                <div className="mb-4">
+                  <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
+                  <select
+                    value={selectedSymbol}
+                    onChange={async (e) => {
+                      const newSymbol = e.target.value;
+                      setSelectedSymbol(newSymbol);
+                      try {
+                        await fetch("/api/set_symbol", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ symbol: newSymbol }),
+                        });
+                        // Reset chart data
+                        if (candlestickSeriesRef.current) candlestickSeriesRef.current.setData([]);
+                        isChartInitialized.current = false;
+                      } catch (err) {
+                        console.error("Failed to set symbol:", err);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="BTC/USDT">₿ Bitcoin (BTC)</option>
+                    <option value="ETH/USDT">Ξ Ethereum (ETH)</option>
+                    <option value="SOL/USDT">◎ Solana (SOL)</option>
+                    <option value="BNB/USDT">🔶 Binance Coin (BNB)</option>
+                    <option value="XRP/USDT">✕ XRP (Ripple)</option>
+                  </select>
+                  <div className="text-[10px] text-blue-400 mt-1">
+                    Trading: <span className="font-bold">{selectedSymbol}</span>
+                  </div>
+                </div>
 
                 {/* Trading Mode Selector */}
                 <div>
@@ -1351,53 +1587,7 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Symbol Selector */}
-                <div>
-                  <label className="text-xs text-white/60 block mb-2">📊 Select Cryptocurrency</label>
-                  <select
-                    value={selectedSymbol}
-                    onChange={async (e) => {
-                      const newSymbol = e.target.value;
-                      setSelectedSymbol(newSymbol);
 
-                      // Reset trade size based on asset class (heuristic)
-                      if (newSymbol.includes("BTC") || newSymbol.includes("ETH")) {
-                        setTradeSize(0.001);
-                      } else {
-                        setTradeSize(10.0); // Default for cheaper assets
-                      }
-
-                      // Notificar al backend para cambiar el feed de datos
-                      try {
-                        await fetch("/api/set_symbol", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ symbol: newSymbol }),
-                        });
-                        // Resetear datos visuales
-                        setMlPrediction(null);
-                        if (candlestickSeriesRef.current) candlestickSeriesRef.current.setData([]);
-                      } catch (err) {
-                        console.error("Failed to set symbol:", err);
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-white font-mono text-sm focus:border-blue-500 focus:outline-none cursor-pointer"
-                  >
-                    <option value="BTC/USDT">₿ Bitcoin (BTC)</option>
-                    <option value="ETH/USDT">Ξ Ethereum (ETH)</option>
-                    <option value="BNB/USDT">⬥ Binance Coin (BNB)</option>
-                    <option value="SOL/USDT">◎ Solana (SOL)</option>
-                    <option value="XRP/USDT">✕ Ripple (XRP)</option>
-                    <option value="ADA/USDT">₳ Cardano (ADA)</option>
-                    <option value="AVAX/USDT">🔺 Avalanche (AVAX)</option>
-                    <option value="DOGE/USDT">Ð Dogecoin (DOGE)</option>
-                    <option value="DOT/USDT">● Polkadot (DOT)</option>
-                    <option value="MATIC/USDT">⬡ Polygon (MATIC)</option>
-                  </select>
-                  <div className="text-xs text-white/40 mt-2">
-                    Trading: <span className="text-blue-400 font-bold">{selectedSymbol}</span>
-                  </div>
-                </div>
               </div>
 
               {/* 2. Trading Configuration */}
@@ -1508,7 +1698,7 @@ export default function Home() {
                     onClick={getAIAdvice}
                     className="w-full py-2 rounded-lg font-mono text-sm border bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20 transition-all"
                   >
-                    🤖 OBTENER CONSEJO DE IA
+                    🐱 OBTENER CONSEJO DE EL GATO
                   </button>
                 )}
               </div>
@@ -1542,7 +1732,7 @@ export default function Home() {
               <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 backdrop-blur">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-bold text-purple-300 flex items-center gap-2">
-                    🤖 Consejo de IA
+                    🐱 Consejo de El Gato
                     <span className={`text-xs px-2 py-0.5 rounded ${aiAdvice.confidence === 'high' ? 'bg-green-500/20 text-green-400' :
                       aiAdvice.confidence === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
                         'bg-gray-500/20 text-gray-400'
@@ -1582,9 +1772,9 @@ export default function Home() {
 
                 <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                   <div className="flex gap-3">
-                    <span className="text-purple-300 font-mono">RSI: {aiAdvice.indicators.rsi}</span>
-                    <span className="text-blue-300 font-mono">ATR: {aiAdvice.indicators.atr}</span>
-                    <span className="text-white/60">{aiAdvice.indicators.trend} / {aiAdvice.indicators.volatility}</span>
+                    <span className="text-purple-300 font-mono">RSI: {aiAdvice.indicators?.rsi}</span>
+                    <span className="text-blue-300 font-mono">ATR: {aiAdvice.indicators?.atr}</span>
+                    <span className="text-white/60">{aiAdvice.indicators?.trend} / {aiAdvice.indicators?.volatility}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {aiAdvice.win_probability && (
@@ -1631,7 +1821,7 @@ export default function Home() {
                 {/* ML Prediction Panel */}
                 <div className="mb-4 bg-black/20 rounded-lg p-4 border border-purple-500/20">
                   <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
-                    <span>🤖</span> Predicción en Tiempo Real
+                    <span>🐱</span> Predicción en Tiempo Real
                     {mlPrediction?.is_trained && <span className="text-[10px] bg-green-900/50 text-green-300 px-2 py-0.5 rounded-full border border-green-500/30">Modelo Entrenado</span>}
                   </h3>
 
@@ -1890,273 +2080,292 @@ export default function Home() {
                 </div>
               )}
 
-              {/* System Health Dashboard */}
-              {systemHealth && (
-                <div className="md:col-span-3 rounded-xl border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4 backdrop-blur mb-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-500/20 rounded-lg">
-                        <span className="text-2xl">⚡</span>
+              {/* --- POSITIONS TABLE (MULTI-ASSET) --- */}
+              <div className="col-span-12 lg:col-span-8 bg-gray-900/50 p-6 rounded-xl border border-gray-800 backdrop-blur-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <span className="text-xl">📊</span> Active Positions
+                  </h3>
+                  <div className="text-sm text-gray-400">
+                    Total PnL: <span className={(pnl?.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}>
+                      ${(pnl?.total_pnl || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <PositionsTable positions={pnl?.positions || []} />
+              </div>
+
+              {/* --- MARKET STATUS PANEL --- */}
+              <div className="col-span-12 lg:col-span-4 bg-gray-900/50 p-6 rounded-xl border border-gray-800 backdrop-blur-sm">
+                {systemHealth && (
+                  <div className="rounded-xl border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4 backdrop-blur mb-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-green-500/20 rounded-lg">
+                          <span className="text-2xl">⚡</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-green-300">System Health</p>
+                          <p className="text-xs text-green-200/50">Status & Performance Monitoring</p>
+                        </div>
+                      </div>
+                      <div className={`px-3 py-1 rounded-full border ${systemHealth.status === 'online'
+                        ? 'bg-green-900/50 text-green-300 border-green-500/30'
+                        : 'bg-red-900/50 text-red-300 border-red-500/30'
+                        }`}>
+                        <span className="text-xs font-mono">
+                          {systemHealth.status === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div className="bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">Uptime</div>
+                        <div className="text-lg font-mono font-bold text-green-300">
+                          {Math.floor(systemHealth.uptime / 60)}m
+                        </div>
+                      </div>
+                      <div className="bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">Experiencias</div>
+                        <div className="text-lg font-mono font-bold text-blue-300">
+                          {systemHealth.memory_experiences}
+                        </div>
+                      </div>
+                      <div className="bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">Confianza</div>
+                        <div className={`text-lg font-mono font-bold ${systemHealth.learning_confidence === 'HIGH' ? 'text-green-400' :
+                          systemHealth.learning_confidence === 'MEDIUM' ? 'text-yellow-400' :
+                            'text-gray-400'
+                          }`}>
+                          {systemHealth.learning_confidence}
+                        </div>
+                      </div>
+                      <div className="bg-black/20 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">RAM</div>
+                        <div className="text-lg font-mono font-bold text-purple-300">
+                          {systemHealth.memory_mb?.toFixed(0) || 0}MB
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Training Button */}
+                    <div className="bg-black/20 rounded-lg p-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-yellow-300">🚀 Entrenamiento Rápido</p>
+                        <p className="text-xs text-gray-400">Aprende de 100 trades históricos en segundos</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          setTrainingInProgress(true);
+                          try {
+                            const res = await fetch('/api/training/run', { method: 'POST' });
+                            const data = await res.json();
+                            alert(data.success ? `✅ ${data.message}` : `❌ ${data.message}`);
+                          } catch (error) {
+                            alert('❌ Error iniciando entrenamiento');
+                          }
+                          setTrainingInProgress(false);
+                        }}
+                        disabled={trainingInProgress}
+                        className="px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 text-sm font-bold"
+                      >
+                        {trainingInProgress ? '⏳ Entrenando...' : '🎯 Entrenar Ahora'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. Performance Dashboard (New) */}
+                {memoryStats && memoryStats.total_trades > 0 && (
+                  <div className="md:col-span-3 rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 p-4 backdrop-blur mt-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-blue-500/20 rounded-lg">
+                        <span className="text-2xl">📊</span>
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-green-300">System Health</p>
-                        <p className="text-xs text-green-200/50">Status & Performance Monitoring</p>
+                        <p className="text-sm font-bold text-blue-300">Performance Dashboard</p>
+                        <p className="text-xs text-blue-200/50">Real-time Metrics & Equity Curve</p>
                       </div>
                     </div>
-                    <div className={`px-3 py-1 rounded-full border ${systemHealth.status === 'online'
-                      ? 'bg-green-900/50 text-green-300 border-green-500/30'
-                      : 'bg-red-900/50 text-red-300 border-red-500/30'
-                      }`}>
-                      <span className="text-xs font-mono">
-                        {systemHealth.status === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div className="bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-gray-400 mb-1">Uptime</div>
-                      <div className="text-lg font-mono font-bold text-green-300">
-                        {Math.floor(systemHealth.uptime / 60)}m
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div
+                        className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                        title="Profit Factor: Relación entre Ganancia Bruta y Pérdida Bruta.&#10;> 1.0: Estrategia Rentable&#10;> 1.5: Estrategia Excelente&#10;< 1.0: Estrategia Perdedora"
+                      >
+                        <p className="text-xs text-gray-400 mb-1 font-medium">Profit Factor ℹ️</p>
+                        <p className={`text-xl font-mono font-bold ${memoryStats.profit_factor >= 1.5 ? 'text-green-400' : memoryStats.profit_factor >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
+                          {memoryStats.profit_factor}
+                        </p>
+                      </div>
+                      <div
+                        className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                        title="Net Profit: Ganancia Neta Real (Ganancia Bruta - Pérdida Bruta). Lo que realmente has ganado."
+                      >
+                        <p className="text-xs text-gray-400 mb-1 font-medium">Net Profit ℹ️</p>
+                        <p className={`text-xl font-mono font-bold ${memoryStats.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          ${memoryStats.net_profit}
+                        </p>
+                      </div>
+                      <div
+                        className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                        title="Gross Profit: Suma total de todas las operaciones ganadoras, sin restar las pérdidas."
+                      >
+                        <p className="text-xs text-gray-400 mb-1 font-medium">Gross Profit ℹ️</p>
+                        <p className="text-xl font-mono font-bold text-green-400/80">
+                          ${memoryStats.gross_profit}
+                        </p>
+                      </div>
+                      <div
+                        className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
+                        title="Gross Loss: Suma total de todas las operaciones perdedoras (en valor absoluto)."
+                      >
+                        <p className="text-xs text-gray-400 mb-1 font-medium">Gross Loss ℹ️</p>
+                        <p className="text-xl font-mono font-bold text-red-400/80">
+                          -${memoryStats.gross_loss}
+                        </p>
                       </div>
                     </div>
-                    <div className="bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-gray-400 mb-1">Experiencias</div>
-                      <div className="text-lg font-mono font-bold text-blue-300">
-                        {systemHealth.memory_experiences}
-                      </div>
-                    </div>
-                    <div className="bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-gray-400 mb-1">Confianza</div>
-                      <div className={`text-lg font-mono font-bold ${systemHealth.learning_confidence === 'HIGH' ? 'text-green-400' :
-                        systemHealth.learning_confidence === 'MEDIUM' ? 'text-yellow-400' :
-                          'text-gray-400'
-                        }`}>
-                        {systemHealth.learning_confidence}
-                      </div>
-                    </div>
-                    <div className="bg-black/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-gray-400 mb-1">RAM</div>
-                      <div className="text-lg font-mono font-bold text-purple-300">
-                        {systemHealth.memory_mb?.toFixed(0) || 0}MB
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Quick Training Button */}
-                  <div className="bg-black/20 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-yellow-300">🚀 Entrenamiento Rápido</p>
-                      <p className="text-xs text-gray-400">Aprende de 100 trades históricos en segundos</p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        setTrainingInProgress(true);
-                        try {
-                          const res = await fetch('/api/training/run', { method: 'POST' });
-                          const data = await res.json();
-                          alert(data.success ? `✅ ${data.message}` : `❌ ${data.message}`);
-                        } catch (error) {
-                          alert('❌ Error iniciando entrenamiento');
-                        }
-                        setTrainingInProgress(false);
-                      }}
-                      disabled={trainingInProgress}
-                      className="px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 text-sm font-bold"
-                    >
-                      {trainingInProgress ? '⏳ Entrenando...' : '🎯 Entrenar Ahora'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* 5. Performance Dashboard (New) */}
-              {memoryStats && memoryStats.total_trades > 0 && (
-                <div className="md:col-span-3 rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 p-4 backdrop-blur mt-4">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-blue-500/20 rounded-lg">
-                      <span className="text-2xl">📊</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-blue-300">Performance Dashboard</p>
-                      <p className="text-xs text-blue-200/50">Real-time Metrics & Equity Curve</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div
-                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                      title="Profit Factor: Relación entre Ganancia Bruta y Pérdida Bruta.&#10;> 1.0: Estrategia Rentable&#10;> 1.5: Estrategia Excelente&#10;< 1.0: Estrategia Perdedora"
-                    >
-                      <p className="text-xs text-gray-400 mb-1 font-medium">Profit Factor ℹ️</p>
-                      <p className={`text-xl font-mono font-bold ${memoryStats.profit_factor >= 1.5 ? 'text-green-400' : memoryStats.profit_factor >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {memoryStats.profit_factor}
-                      </p>
-                    </div>
-                    <div
-                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                      title="Net Profit: Ganancia Neta Real (Ganancia Bruta - Pérdida Bruta). Lo que realmente has ganado."
-                    >
-                      <p className="text-xs text-gray-400 mb-1 font-medium">Net Profit ℹ️</p>
-                      <p className={`text-xl font-mono font-bold ${memoryStats.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        ${memoryStats.net_profit}
-                      </p>
-                    </div>
-                    <div
-                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                      title="Gross Profit: Suma total de todas las operaciones ganadoras, sin restar las pérdidas."
-                    >
-                      <p className="text-xs text-gray-400 mb-1 font-medium">Gross Profit ℹ️</p>
-                      <p className="text-xl font-mono font-bold text-green-400/80">
-                        ${memoryStats.gross_profit}
-                      </p>
-                    </div>
-                    <div
-                      className="bg-black/20 rounded-lg p-3 hover:bg-black/30 transition-colors cursor-help"
-                      title="Gross Loss: Suma total de todas las operaciones perdedoras (en valor absoluto)."
-                    >
-                      <p className="text-xs text-gray-400 mb-1 font-medium">Gross Loss ℹ️</p>
-                      <p className="text-xl font-mono font-bold text-red-400/80">
-                        -${memoryStats.gross_loss}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Cumulative PnL Chart (Simple CSS Bar/Line representation) */}
-                  <div className="bg-black/20 rounded-lg p-4 h-48 flex flex-col relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-xs text-yellow-400 font-mono font-bold">📈 Equity Curve (Ganancia Acumulada)</div>
-                      {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
-                        <div className="text-xs text-gray-400 font-mono">
-                          {memoryStats.cumulative_pnl.length} trades
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Chart Area */}
-                    <div className="flex-1 relative">
-                      {/* Zero Line */}
-                      <div className="absolute w-full h-px bg-white/20 top-1/2 left-0 z-0">
-                        <span className="absolute right-0 -top-3 text-[10px] text-gray-500">$0</span>
-                      </div>
-
-                      {/* Real-time Line Overlay */}
-                      <svg className="absolute top-0 left-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    {/* Cumulative PnL Chart (Simple CSS Bar/Line representation) */}
+                    <div className="bg-black/20 rounded-lg p-4 h-48 flex flex-col relative overflow-hidden">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs text-yellow-400 font-mono font-bold">📈 Equity Curve (Ganancia Acumulada)</div>
                         {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
-                          <>
-                            {/* Gradient fill under the line */}
-                            <defs>
-                              <linearGradient id="equityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
-                                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
-                              </linearGradient>
-                            </defs>
-                            {/* Filled area */}
-                            <polygon
-                              points={`0,50 ${memoryStats.cumulative_pnl.map((point: any, i: number) => {
-                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
-                                const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
-                                const y = 50 - (point.pnl / maxVal * 45);
-                                return `${x},${y}`;
-                              }).join(' ')} 100,50`}
-                              fill="url(#equityGradient)"
-                            />
-                            {/* Main line */}
-                            <polyline
-                              points={memoryStats.cumulative_pnl.map((point: any, i: number) => {
-                                const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
-                                const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
-                                const y = 50 - (point.pnl / maxVal * 45);
-                                return `${x},${y}`;
-                              }).join(' ')}
-                              fill="none"
-                              stroke="#22c55e"
-                              strokeWidth="1"
-                              vectorEffect="non-scaling-stroke"
-                            />
-                          </>
+                          <div className="text-xs text-gray-400 font-mono">
+                            {memoryStats.cumulative_pnl.length} trades
+                          </div>
                         )}
-                      </svg>
+                      </div>
 
-                      {/* Bar chart representation */}
-                      <div className="flex items-end gap-1 w-full h-full z-10">
-                        {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 ? (
-                          memoryStats.cumulative_pnl.map((point: any, i: number) => {
-                            const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
-                            const height = Math.min(Math.abs(point.pnl) / maxVal * 45, 45);
-                            const isFirst = i === 0;
-                            const isLast = i === memoryStats.cumulative_pnl.length - 1;
-                            const showTimeLabel = isFirst || isLast || (i % Math.floor(memoryStats.cumulative_pnl.length / 4) === 0);
+                      {/* Chart Area */}
+                      <div className="flex-1 relative">
+                        {/* Zero Line */}
+                        <div className="absolute w-full h-px bg-white/20 top-1/2 left-0 z-0">
+                          <span className="absolute right-0 -top-3 text-[10px] text-gray-500">$0</span>
+                        </div>
 
-                            return (
-                              <div key={i} className="flex-1 min-w-[2px] relative group">
-                                <div
-                                  className={`w-full rounded-t transition-all duration-500 ${point.pnl >= 0 ? 'bg-green-500/30' : 'bg-red-500/30'}`}
-                                  style={{
-                                    height: `${Math.max(height, 3)}%`,
-                                    marginBottom: point.pnl >= 0 ? '50%' : `${50 - height}%`
-                                  }}
-                                >
-                                  {/* Tooltip on hover */}
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
-                                    <div className={`font-bold ${point.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                      ${point.pnl.toFixed(2)}
+                        {/* Real-time Line Overlay */}
+                        <svg className="absolute top-0 left-0 w-full h-full z-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 && (
+                            <>
+                              {/* Gradient fill under the line */}
+                              <defs>
+                                <linearGradient id="equityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
+                                  <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              {/* Filled area */}
+                              <polygon
+                                points={`0,50 ${memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                                  const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                                  const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
+                                  const y = 50 - (point.pnl / maxVal * 45);
+                                  return `${x},${y}`;
+                                }).join(' ')} 100,50`}
+                                fill="url(#equityGradient)"
+                              />
+                              {/* Main line */}
+                              <polyline
+                                points={memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                                  const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                                  const x = (i / (memoryStats.cumulative_pnl.length - 1 || 1)) * 100;
+                                  const y = 50 - (point.pnl / maxVal * 45);
+                                  return `${x},${y}`;
+                                }).join(' ')}
+                                fill="none"
+                                stroke="#22c55e"
+                                strokeWidth="1"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            </>
+                          )}
+                        </svg>
+
+                        {/* Bar chart representation */}
+                        <div className="flex items-end gap-1 w-full h-full z-10">
+                          {memoryStats.cumulative_pnl && memoryStats.cumulative_pnl.length > 0 ? (
+                            memoryStats.cumulative_pnl.map((point: any, i: number) => {
+                              const maxVal = Math.max(...memoryStats.cumulative_pnl.map((p: any) => Math.abs(p.pnl)), 10);
+                              const height = Math.min(Math.abs(point.pnl) / maxVal * 45, 45);
+                              const isFirst = i === 0;
+                              const isLast = i === memoryStats.cumulative_pnl.length - 1;
+                              const showTimeLabel = isFirst || isLast || (i % Math.floor(memoryStats.cumulative_pnl.length / 4) === 0);
+
+                              return (
+                                <div key={i} className="flex-1 min-w-[2px] relative group">
+                                  <div
+                                    className={`w-full rounded-t transition-all duration-500 ${point.pnl >= 0 ? 'bg-green-500/30' : 'bg-red-500/30'}`}
+                                    style={{
+                                      height: `${Math.max(height, 3)}%`,
+                                      marginBottom: point.pnl >= 0 ? '50%' : `${50 - height}%`
+                                    }}
+                                  >
+                                    {/* Tooltip on hover */}
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+                                      <div className={`font-bold ${point.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        ${point.pnl.toFixed(2)}
+                                      </div>
+                                      <div className="text-gray-400">Trade #{point.trade}</div>
                                     </div>
-                                    <div className="text-gray-400">Trade #{point.trade}</div>
                                   </div>
+                                  {/* Time label */}
+                                  {showTimeLabel && (
+                                    <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-gray-500 whitespace-nowrap">
+                                      #{point.trade}
+                                    </div>
+                                  )}
                                 </div>
-                                {/* Time label */}
-                                {showTimeLabel && (
-                                  <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-gray-500 whitespace-nowrap">
-                                    #{point.trade}
-                                  </div>
-                                )}
+                              );
+                            })
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
+                              No trades yet to display chart
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pattern Performance */}
+                    {memoryStats && memoryStats.pattern_stats && memoryStats.pattern_stats.length > 0 && (
+                      <div className="mt-4 bg-black/20 rounded-lg p-4 border border-orange-500/20">
+                        <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
+                          <span>🕯️</span> Performance por Patrón
+                        </h3>
+                        <div className="space-y-2">
+                          {memoryStats.pattern_stats.map((stat: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between bg-black/30 p-2 rounded text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-gray-300">{stat.pattern}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${stat.confidence === 'HIGH' ? 'bg-green-900 text-green-300' :
+                                  stat.confidence === 'MEDIUM' ? 'bg-yellow-900 text-yellow-300' :
+                                    'bg-gray-800 text-gray-400'
+                                  }`}>{stat.confidence}</span>
                               </div>
-                            );
-                          })
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
-                            No trades yet to display chart
-                          </div>
-                        )}
+                              <div className="flex items-center gap-4">
+                                <span className={stat.win_rate >= 50 ? 'text-green-400' : 'text-red-400'}>
+                                  {stat.win_rate}% WR
+                                </span>
+                                <span className={`font-mono w-16 text-right ${stat.avg_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  ${stat.avg_pnl}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
-
-                  {/* Pattern Performance */}
-                  {memoryStats && memoryStats.pattern_stats && memoryStats.pattern_stats.length > 0 && (
-                    <div className="mt-4 bg-black/20 rounded-lg p-4 border border-orange-500/20">
-                      <h3 className="text-sm font-bold text-orange-300 mb-3 flex items-center gap-2">
-                        <span>🕯️</span> Performance por Patrón
-                      </h3>
-                      <div className="space-y-2">
-                        {memoryStats.pattern_stats.map((stat: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between bg-black/30 p-2 rounded text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-gray-300">{stat.pattern}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${stat.confidence === 'HIGH' ? 'bg-green-900 text-green-300' :
-                                stat.confidence === 'MEDIUM' ? 'bg-yellow-900 text-yellow-300' :
-                                  'bg-gray-800 text-gray-400'
-                                }`}>{stat.confidence}</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <span className={stat.win_rate >= 50 ? 'text-green-400' : 'text-red-400'}>
-                                {stat.win_rate}% WR
-                              </span>
-                              <span className={`font-mono w-16 text-right ${stat.avg_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${stat.avg_pnl}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
 
+
+          </div>
           {/* Trade History (1/4 width) - NOW WITH INDIVIDUAL TRADES */}
           <div className="lg:col-span-1 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-panel backdrop-blur h-full flex flex-col">
@@ -2164,17 +2373,20 @@ export default function Home() {
               <div className="flex-grow overflow-y-auto custom-scrollbar h-[500px]">
                 <div className="space-y-2">
                   {activeTrades.length > 0 ? (
-                    activeTrades.map((trade) => (
-                      <div key={trade.id} className="bg-black/30 p-3 rounded-lg border border-white/5 hover:border-white/10 transition">
+                    activeTrades.map((trade, i) => (
+                      <div key={`${trade.id}-${i}`} className="bg-black/30 p-3 rounded-lg border border-white/5 hover:border-white/10 transition">
                         {/* Trade Info Row */}
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
+                            <span className="text-xl" title={trade.source === 'auto' ? 'EL GATO (Auto)' : 'Usuario (Manual)'}>
+                              {trade.source === 'auto' ? '🐱' : '👤'}
+                            </span>
                             <span className={trade.side === 'LONG' ? 'text-green-400 text-xl' : 'text-red-400 text-xl'}>
                               {trade.side === 'LONG' ? '↗' : '↘'}
                             </span>
                             <div>
                               <div className="text-sm font-bold">{trade.side}</div>
-                              <div className="text-xs text-gray-400 font-mono">{trade.size.toFixed(4)} BTC</div>
+                              <div className="text-xs text-gray-400 font-mono">{trade.size.toFixed(4)} {trade.symbol ? trade.symbol.split('/')[0] : ''}</div>
                             </div>
                           </div>
                           <div className="text-right">

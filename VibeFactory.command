@@ -1,53 +1,51 @@
 #!/bin/bash
 
-# Vibe Factory Launcher 🚀
-# ========================
+# Vibe Factory Launcher (Single Window Mode)
+# Runs Backend and Frontend in the same terminal window.
+# Closing this window stops everything.
 
-# Colores
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-echo -e "${BLUE}=================================${NC}"
-echo -e "${BLUE}   🚀 VIBE FACTORY LAUNCHER 🚀   ${NC}"
-echo -e "${BLUE}=================================${NC}"
-echo ""
-
-# 1. Ir al directorio del proyecto
 PROJECT_DIR="/Users/raydelmartinez/Desktop/cursor/vibe_factory"
-cd "$PROJECT_DIR" || { echo "❌ Error: No encuentro el directorio del proyecto"; exit 1; }
 
-# 2. Verificar si necesitamos construir el frontend
-echo -e "${GREEN}📦 Verificando Frontend...${NC}"
-if [ ! -d "frontend/out" ]; then
-    echo "   Construyendo Frontend (esto puede tardar un poco la primera vez)..."
-    cd frontend
-    npm install
-    npm run build
-    cd ..
-else
-    echo "   Frontend ya construido. Saltando build."
-    # Opcional: Descomentar para forzar rebuild siempre
-    # cd frontend && npm run build && cd ..
-fi
+# Function to cleanup background processes on exit
+cleanup() {
+    echo "� Shutting down Vibe Factory..."
+    kill $(jobs -p) 2>/dev/null
+    exit
+}
 
-# 3. Iniciar Backend
-echo -e "${GREEN}🧠 Iniciando Cerebro (Backend)...${NC}"
-cd backend
+# Trap interrupt and exit signals
+trap cleanup SIGINT SIGTERM EXIT
 
-# Instalar dependencias si faltan (rápido)
-pip install -r requirements.txt > /dev/null 2>&1
+echo "🚀 Initializing Vibe Factory..."
+echo "📂 Project: $PROJECT_DIR"
 
-# Matar procesos anteriores en puerto 8000
-lsof -ti:8000 | xargs kill -9 2>/dev/null
+# 1. Start Backend
+echo "🧠 Starting Brain (Backend)..."
+cd "$PROJECT_DIR/backend"
+# Try to activate venv, silence error if not found (fallback to system python)
+source venv/bin/activate 2>/dev/null || true
+python3 -m uvicorn api:app --reload --host 0.0.0.0 --port 8000 > "$PROJECT_DIR/backend.log" 2>&1 &
+BACKEND_PID=$!
+echo "✅ Backend running (PID: $BACKEND_PID)"
 
-# Iniciar servidor
-echo -e "${GREEN}✅ Servidor iniciado en http://localhost:8000${NC}"
-echo "   Presiona CTRL+C para detener."
-echo ""
+# 2. Start Frontend
+echo "🎨 Starting Face (Frontend)..."
+cd "$PROJECT_DIR/frontend"
+npm run dev > "$PROJECT_DIR/frontend.log" 2>&1 &
+FRONTEND_PID=$!
+echo "✅ Frontend running (PID: $FRONTEND_PID)"
 
-# Abrir navegador
-open http://localhost:8000
+# 3. Open Browser
+echo "⏳ Waiting for systems to warm up..."
+sleep 5
+open "http://localhost:3000"
 
-# Ejecutar uvicorn
-python3 -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
+echo "==================================================="
+echo "🎉 Vibe Factory is LIVE!"
+echo "👉 Dashboard: http://localhost:3000"
+echo "📝 Logs are being saved to backend.log and frontend.log"
+echo "❌ Close this window to stop all servers."
+echo "==================================================="
+
+# Keep script running to maintain background processes
+wait
