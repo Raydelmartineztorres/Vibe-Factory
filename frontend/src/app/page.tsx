@@ -971,46 +971,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black text-white">
       <main className="mx-auto flex w-full max-w-[98%] flex-col gap-10 px-4 py-8 lg:py-10">
-        <header className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur">
-          <div className="flex justify-between items-center">
-            <p className="text-sm uppercase tracking-[0.3em] text-gray-400 font-medium">
-              Vibe Factory
-            </p>
-            <div className="flex items-center gap-2 text-sm font-mono border border-white/10 px-3 py-1 rounded-full bg-black/20">
-              <span>Backend:</span>
-              <span className={backendStatus.includes("Online") ? "text-green-400" : "text-red-400"}>
-                {backendStatus}
-              </span>
-            </div>
-          </div>
-          <h1 className="text-4xl font-semibold leading-tight md:text-5xl">
-            Configuración base para construir apps guiadas por IA en minutos.
-          </h1>
-          <p className="max-w-3xl text-lg text-gray-300">
-            Esta vista resume el estado de la fábrica: frontend listo, módulos
-            backend definidos y documentación en marcha. Usa esta página como
-            panel central para seguir los pasos y saber qué tocar a
-            continuación.
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <a
-              href="https://nextjs.org/docs"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-            >
-              Ver guía Next.js
-            </a>
-            <a
-              href="https://tailwindcss.com/docs"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-full border border-foreground/20 px-6 py-3 text-sm font-semibold hover:bg-foreground/5"
-            >
-              Customizar tema
-            </a>
-          </div>
-        </header>
 
         <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {steps.map((step) => (
