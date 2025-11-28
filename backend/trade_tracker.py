@@ -37,7 +37,7 @@ class TradeTracker:
             return 1
         return max(t.get("id", 0) for t in self.trades) + 1
     
-    def open_trade(self, size: float, entry_price: float, side: str = "LONG", symbol: str = "BTC/USDT", trade_id: str | int | None = None, source: str = "manual") -> Dict:
+    def open_trade(self, size: float, entry_price: float, side: str = "LONG", symbol: str = "BTC/USDT", trade_id: str | int | None = None, source: str = "manual", fee_rate: float = 0.001) -> Dict:
         """
         Abre un nuevo trade.
         
@@ -48,10 +48,15 @@ class TradeTracker:
             symbol: Símbolo del activo (ej: BTC/USDT)
             trade_id: ID opcional para el trade
             source: "manual" (👤 usuario) o "auto" (🐱 EL GATO)
+            fee_rate: Tasa de comisión (default 0.1%)
             
         Returns:
             Diccionario del trade creado
         """
+        # Calcular fee de entrada (simulado)
+        entry_value = size * entry_price
+        entry_fee = entry_value * fee_rate
+
         trade = {
             "id": trade_id if trade_id is not None else self._generate_id(),
             "symbol": symbol,
@@ -62,15 +67,16 @@ class TradeTracker:
             "status": "OPEN",
             "source": source,  # 👤 manual or 🐱 auto
             # 🆕 Fee tracking
-            "entry_fee": 0.0,
-            "exit_fee": 0.0,
-            "total_fees": 0.0,
-            "net_pnl": 0.0
+            "fee_rate": fee_rate,
+            "entry_fee": entry_fee,
+            "exit_fee": 0.0, # Se calcula al cerrar
+            "total_fees": entry_fee,
+            "net_pnl": -entry_fee # Empieza negativo por el fee
         }
         self.trades.append(trade)
         self._save()
         icon = "🐱" if source == "auto" else "👤"
-        print(f"[TRACKER] ✅ {icon} Trade #{trade['id']} abierto: {size} {symbol} @ ${entry_price:,.2f} ({side})")
+        print(f"[TRACKER] ✅ {icon} Trade #{trade['id']} abierto: {size} {symbol} @ ${entry_price:,.2f} ({side}) | Fee: ${entry_fee:.2f}")
         return trade
     
     def close_trade(self, trade_id: int, exit_price: float) -> Optional[Dict]:
@@ -90,14 +96,26 @@ class TradeTracker:
                 trade["exit_price"] = exit_price
                 trade["closed_at"] = datetime.now().isoformat()
                 
-                # Calcular PnL
+                # Calcular Fee de Salida
+                fee_rate = trade.get("fee_rate", 0.001)
+                exit_value = trade["size"] * exit_price
+                exit_fee = exit_value * fee_rate
+                
+                trade["exit_fee"] = exit_fee
+                trade["total_fees"] = trade["entry_fee"] + exit_fee
+
+                # Calcular Gross PnL (sin fees)
                 if trade["side"] == "LONG":
-                    trade["pnl"] = (exit_price - trade["entry_price"]) * trade["size"]
+                    gross_pnl = (exit_price - trade["entry_price"]) * trade["size"]
                 else:  # SHORT
-                    trade["pnl"] = (trade["entry_price"] - exit_price) * trade["size"]
+                    gross_pnl = (trade["entry_price"] - exit_price) * trade["size"]
+                
+                # Calcular Net PnL (restando fees)
+                trade["pnl"] = gross_pnl - trade["total_fees"]
+                trade["net_pnl"] = trade["pnl"]
                 
                 self._save()
-                print(f"[TRACKER] 🔒 Trade #{trade_id} cerrado @ ${exit_price:,.0f} | PnL: ${trade['pnl']:,.2f}")
+                print(f"[TRACKER] 🔒 Trade #{trade_id} cerrado @ ${exit_price:,.0f} | Gross: ${gross_pnl:,.2f} | Fees: ${trade['total_fees']:.2f} | Net PnL: ${trade['pnl']:,.2f}")
                 return trade
         
         return None
@@ -175,7 +193,7 @@ class TradeTracker:
     
     def calculate_live_pnl(self, trade: Dict, current_price: float) -> Dict:
         """
-        Calcula el PnL no realizado de un trade.
+        Calcula el PnL no realizado de un trade, INCLUYENDO FEES estimados.
         
         Args:
             trade: Diccionario del trade
@@ -187,15 +205,25 @@ class TradeTracker:
         trade = trade.copy()
         trade["current_price"] = current_price
         
+        # 1. Calcular Gross PnL (Cambio de precio puro)
         if trade["side"] == "LONG":
-            pnl_usd = (current_price - trade["entry_price"]) * trade["size"]
+            gross_pnl = (current_price - trade["entry_price"]) * trade["size"]
         else:  # SHORT
-            pnl_usd = (trade["entry_price"] - current_price) * trade["size"]
+            gross_pnl = (trade["entry_price"] - current_price) * trade["size"]
+        
+        # 2. Calcular Fees Estimados (Entrada ya pagada + Salida estimada)
+        fee_rate = trade.get("fee_rate", 0.001) # Default 0.1%
+        entry_fee = trade.get("entry_fee", trade["entry_price"] * trade["size"] * fee_rate)
+        estimated_exit_fee = current_price * trade["size"] * fee_rate
+        total_estimated_fees = entry_fee + estimated_exit_fee
+
+        # 3. Calcular Net PnL (Realista)
+        net_pnl = gross_pnl - total_estimated_fees
         
         entry_value = trade["entry_price"] * trade["size"]
-        pnl_pct = (pnl_usd / entry_value * 100) if entry_value > 0 else 0.0
+        pnl_pct = (net_pnl / entry_value * 100) if entry_value > 0 else 0.0
         
-        trade["unrealized_pnl_usd"] = pnl_usd
+        trade["unrealized_pnl_usd"] = net_pnl
         trade["unrealized_pnl_pct"] = pnl_pct
         
         return trade
