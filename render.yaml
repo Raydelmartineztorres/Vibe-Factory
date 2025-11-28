@@ -16,8 +16,18 @@ services:
         value: admin
       - key: AUTH_PASSWORD
         generateValue: true
-      - key: BINANCE_TESTNET_KEY
-        sync: false
-      - key: BINANCE_TESTNET_SECRET
-        sync: false
     healthCheckPath: /health
+
+  # Frontend (Next.js)
+  - type: web
+    name: vibe-factory-frontend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: "cd frontend && npm install && npm run build"
+    startCommand: "cd frontend && npm run start"
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: NEXT_PUBLIC_API_URL
+        value: https://vibe-factory-backend.onrender.com
