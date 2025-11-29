@@ -7,26 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import { createChart, ColorType, IChartApi, CandlestickSeries, LineSeries, AreaSeries, HistogramSeries } from 'lightweight-charts';
 import PositionsTable from '@/components/PositionsTable';
 
-const steps = [
-  {
-    title: "01 · Frontend",
-    description:
-      "Next.js + Tailwind listos para UI de control humano (HITL) con dashboards, alertas y botones críticos.",
-    checklist: ["Dashboard base", "Tema accesible", "Botón STOP rojo"],
-  },
-  {
-    title: "02 · Backend",
-    description:
-      "Módulos Python para datos históricos, risk engine, news analyzer y ejecución segura.",
-    checklist: ["data_collector", "risk_strategy", "broker_api_handler"],
-  },
-  {
-    title: "03 · DevOps & Docs",
-    description:
-      "Prompts, scripts y flujos documentados para reutilizar la fábrica en cada nuevo proyecto.",
-    checklist: ["Manual en docs/", "Variables .env", "Playbooks de despliegue"],
-  },
-];
+
 
 interface BacktestResult {
   final_capital: number;
@@ -731,39 +712,45 @@ export default function Home() {
           const currentPrice = livePrice || 90000;
 
           // RSI: Use raw values (0-100)
-          if (rsiSeriesRef.current && data.rsi && data.rsi.length > 0) {
-            if (showRSI) {
-              rsiSeriesRef.current.setData(data.rsi);
-            } else {
-              rsiSeriesRef.current.setData([]);
-            }
+          if (data.rsi && data.rsi.length > 0) {
             setCurrentRSI(data.rsi[data.rsi.length - 1]?.value || null);
+            if (rsiSeriesRef.current) {
+              if (showRSI) {
+                rsiSeriesRef.current.setData(data.rsi);
+              } else {
+                rsiSeriesRef.current.setData([]);
+              }
+            }
           }
 
           // ATR: Use raw values
-          if (atrSeriesRef.current && data.atr && data.atr.length > 0) {
-            if (showATR) {
-              atrSeriesRef.current.setData(data.atr);
-            } else {
-              atrSeriesRef.current.setData([]);
-            }
+          if (data.atr && data.atr.length > 0) {
             const lastATR = data.atr[data.atr.length - 1]?.value || 0;
             setCurrentATR((lastATR / currentPrice) * 100);
+            if (atrSeriesRef.current) {
+              if (showATR) {
+                atrSeriesRef.current.setData(data.atr);
+              } else {
+                atrSeriesRef.current.setData([]);
+              }
+            }
           }
 
           // MACD: Use raw histogram values with colors
-          if (macdSeriesRef.current && data.macd && data.macd.length > 0) {
-            if (showMACD) {
-              const macdData = data.macd.map((m: any) => ({
-                time: m.time,
-                value: m.histogram,
-                color: m.histogram >= 0 ? '#22c55e' : '#ef4444'
-              }));
-              macdSeriesRef.current.setData(macdData);
-            } else {
-              macdSeriesRef.current.setData([]);
-            }
+          if (data.macd && data.macd.length > 0) {
             setCurrentMACD(data.macd[data.macd.length - 1]?.histogram || null);
+            if (macdSeriesRef.current) {
+              if (showMACD) {
+                const macdData = data.macd.map((m: any) => ({
+                  time: m.time,
+                  value: m.histogram,
+                  color: m.histogram >= 0 ? '#22c55e' : '#ef4444'
+                }));
+                macdSeriesRef.current.setData(macdData);
+              } else {
+                macdSeriesRef.current.setData([]);
+              }
+            }
           }
         }
       } catch (error) {
@@ -921,12 +908,12 @@ export default function Home() {
       },
     });
 
+    chartRef.current = chart;
+    candlestickSeriesRef.current = candlestickSeries;
+
     // === INDICADORES: SOLO VALORES NUMÉRICOS ===
     // NO se dibujan en el gráfico para mantenerlo limpio
     // Los valores se muestran como números/porcentajes debajo del gráfico
-
-    chartRef.current = chart;
-    candlestickSeriesRef.current = candlestickSeries;
 
     // Set refs to null - no indicator lines on chart
     rsiSeriesRef.current = null;
@@ -972,34 +959,7 @@ export default function Home() {
     <div className="min-h-screen bg-black text-white">
       <main className="mx-auto flex w-full max-w-[98%] flex-col gap-10 px-4 py-8 lg:py-10">
 
-        <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {steps.map((step) => (
-            <article
-              key={step.title}
-              className="flex flex-col gap-4 rounded-2xl border border-foreground/10 bg-white/5 p-6 shadow-panel backdrop-blur"
-            >
-              <div>
-                <p className="text-sm font-semibold text-primary">
-                  {step.title}
-                </p>
-                <p className="mt-2 text-base text-gray-300">
-                  {step.description}
-                </p>
-              </div>
-              <ul className="space-y-2 text-sm text-gray-400">
-                {step.checklist.map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-success" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </section>
+
 
         <section className="rounded-2xl border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
@@ -1280,14 +1240,11 @@ export default function Home() {
             </div>
 
             {/* Chart Card - simple container, 3D effects inside */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-1 shadow-lg backdrop-blur overflow-hidden relative">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur overflow-hidden relative">
               {/* Chart with internal glow effect */}
               <div
                 ref={chartContainerRef}
                 className="w-full h-[500px] bg-black/20 rounded-xl"
-                style={{
-                  filter: 'drop-shadow(0 0 20px rgba(147, 51, 234, 0.15)) drop-shadow(0 0 15px rgba(59, 130, 246, 0.15))'
-                }}
               />
               {/* Force yellow text for chart labels */}
               <style jsx>{`
@@ -1296,7 +1253,7 @@ export default function Home() {
                 }
               `}</style>
               {/* Live Price Overlay - BIGGER and YELLOW */}
-              <div className="absolute top-4 left-4 flex items-center gap-2">
+              <div className="absolute top-4 left-4 flex items-center gap-2 z-50">
                 <div className="bg-black/80 backdrop-blur-md px-4 py-2.5 rounded-lg border border-yellow-500/30 shadow-lg">
                   <span className="text-xs text-gray-400 mr-2 uppercase">{selectedSymbol}</span>
                   <span className="font-mono font-bold text-2xl text-yellow-400">${livePrice?.toFixed(2) || '---'}</span>
@@ -1318,7 +1275,7 @@ export default function Home() {
               >
                 <div className={`w-3 h-0.5 rounded-full shadow-[0_0_8px_rgba(147,51,234,0.6)] ${showRSI ? 'bg-purple-500' : 'bg-gray-500'}`}></div>
                 <span className="text-xs text-purple-300 font-mono">RSI</span>
-                <span className="text-xs text-gray-400 font-medium">Momentum</span>
+
                 <span className="text-sm font-mono font-bold text-purple-400 ml-1">
                   {currentRSI !== null ? `${currentRSI.toFixed(1)}%` : '--'}
                 </span>
@@ -1331,7 +1288,7 @@ export default function Home() {
               >
                 <div className={`w-3 h-0.5 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)] ${showATR ? 'bg-blue-500' : 'bg-gray-500'}`}></div>
                 <span className="text-xs text-blue-300 font-mono">ATR</span>
-                <span className="text-xs text-gray-400 font-medium">Volatilidad</span>
+
                 <span className="text-sm font-mono font-bold text-blue-400 ml-1">
                   {currentATR !== null ? `${currentATR.toFixed(2)}%` : '--'}
                 </span>
@@ -1344,7 +1301,7 @@ export default function Home() {
               >
                 <div className={`w-3 h-0.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)] ${showMACD ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                 <span className="text-xs text-green-300 font-mono">MACD</span>
-                <span className="text-xs text-gray-400 font-medium">Tendencia</span>
+
                 <span className="text-sm font-mono font-bold text-green-400 ml-1">
                   {currentMACD !== null ? `${currentMACD.toFixed(2)}` : '--'}
                 </span>

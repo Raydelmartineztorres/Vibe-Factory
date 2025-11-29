@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TypedDict, Protocol
 from datetime import datetime
 import random
+import pandas as pd
 
 from memory import MarketContext, TradeMemory
 from strategy_profiles import get_strategy_manager
@@ -77,6 +78,7 @@ class RiskStrategy:
         from sentiment_manager import SentimentManager
         from risk_manager import RiskManager
         from volatility_scanner import VolatilityScanner
+        from el_gato import ElGato
         import asyncio
         
         # ML y Memory config (por defecto activados)
@@ -90,6 +92,7 @@ class RiskStrategy:
         self.risk_manager = RiskManager(initial_capital=self.config.capital_virtual)
         self.memory = TradeMemory()
         self.volatility_scanner = VolatilityScanner()
+        self.el_gato = ElGato()
         self.last_prediction = None
         
         # Scanner loop will be started by the event loop in api.py startup
@@ -378,8 +381,8 @@ class RiskStrategy:
         ts_sec = int(timestamp)
         candle_time = ts_sec - (ts_sec % 5)
 
+
         # Simular volumen aleatorio por tick
-        import random
         tick_vol = random.uniform(1.0, 10.0)
 
         # Inicializar listas si no existen
@@ -992,7 +995,7 @@ class RiskStrategy:
                     total_fees = trade_value * (self.TAKER_FEE + self.TAKER_FEE)
                     
                     # 2. Slippage (0.01% - 0.05%)
-                    import random
+
                     slippage_pct = random.uniform(0.0001, 0.0005)
                     slippage_cost = trade_value * slippage_pct
                     
@@ -1045,7 +1048,7 @@ class RiskStrategy:
                 
                 # 🆕 Open trade in tracker
                 trade_id = result.get("id")
-                self.trade_tracker.open_trade(position_size, price, "LONG", symbol=symbol, trade_id=trade_id)
+                self.trade_tracker.open_trade(position_size, price, "LONG", symbol=symbol, trade_id=trade_id, source="auto")
                 
                 # 🛡️ Inicializar trailing stop
                 self.risk_manager.init_trailing_stop(self.position_ids[symbol], price, dynamic_sl, "LONG")
@@ -1212,7 +1215,7 @@ class RiskStrategy:
                     total_fees = trade_value * (self.TAKER_FEE + self.TAKER_FEE)
                     
                     # 2. Slippage (0.01% - 0.05%)
-                    import random
+
                     slippage_pct = random.uniform(0.0001, 0.0005)
                     slippage_cost = trade_value * slippage_pct
                     
@@ -1265,7 +1268,7 @@ class RiskStrategy:
                 
                 # 🆕 Open trade in tracker
                 trade_id = result.get("id")
-                self.trade_tracker.open_trade(position_size, price, "SHORT", symbol=symbol, trade_id=trade_id)
+                self.trade_tracker.open_trade(position_size, price, "SHORT", symbol=symbol, trade_id=trade_id, source="auto")
                 
                 # 🛡️ Inicializar trailing stop
                 self.risk_manager.init_trailing_stop(self.position_ids[symbol], price, dynamic_sl, "SHORT")

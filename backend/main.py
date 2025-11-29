@@ -10,10 +10,15 @@ Expone una CLI mínima para:
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Literal
 
 import typer
 from rich.console import Console
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
 from backtester import run_backtest
 from data_collector import bootstrap_data_pipeline

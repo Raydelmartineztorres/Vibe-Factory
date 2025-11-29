@@ -315,7 +315,7 @@ async def get_balance(mode: Literal["demo", "real"] = "demo"):
         return _simulated_balance.copy()
     else:
         try:
-            exchange = await _get_exchange()
+            exchange = await _get_exchange(mode=mode)
             balance = await exchange.fetch_balance()
             
             # Normalizar respuesta para el frontend (USDT y BTC)
@@ -389,7 +389,7 @@ async def close_position(symbol: str, mode: Literal["demo", "real"]) -> dict:
     else:
         # Modo REAL
         try:
-            exchange = await _get_exchange()
+            exchange = await _get_exchange(mode=mode)
             
             # 1. Obtener balance del activo base
             balance = await exchange.fetch_balance()

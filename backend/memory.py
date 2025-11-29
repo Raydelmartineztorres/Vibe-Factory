@@ -38,19 +38,47 @@ class TradeMemory:
         self.memory_file = Path(__file__).parent / ".cache" / "trade_memory.json"
         self.experiences = []
         self.pattern_memory: Dict[str, List[float]] = {}  # Patrón -> lista de PnLs
+        
+        # 🚀 OPTIMIZACIÓN: Cache en RAM para evitar leer archivo constantemente
+        self._last_file_load = 0
+        self._last_file_save = 0
+        self._cache_ttl = 60  # Recargar archivo solo cada 60 segundos
+        self._save_delay = 5  # Guardar cambios cada 5 segundos (no en cada operación)
+        self._pending_save = False
+        
         self._load_memory()
 
     def _load_memory(self):
+        # 🚀 OPTIMIZACIÓN: Solo recargar si el cache expiró
+        current_time = time.time()
+        if current_time - self._last_file_load < self._cache_ttl:
+            return  # Usar datos en RAM
+        
         if self.memory_file.exists():
             try:
                 data = json.loads(self.memory_file.read_text())
                 self.experiences = data.get("experiences", [])
                 self.pattern_memory = data.get("patterns", {})
+                self._last_file_load = current_time
             except:
                 self.experiences = []
                 self.pattern_memory = {}
 
     def _save_memory(self):
+        # 🚀 OPTIMIZACIÓN: Guardar con delay para evitar escrituras excesivas
+        current_time = time.time()
+        
+        # Marcar que hay cambios pendientes
+        self._pending_save = True
+        
+        # Solo guardar si pasó el delay o es la primera vez
+        if current_time - self._last_file_save < self._save_delay:
+            return  # Esperar un poco más
+        
+        # Guardar solo si hay cambios pendientes
+        if not self._pending_save:
+            return
+        
         self.memory_file.parent.mkdir(exist_ok=True)
         data = {
             "experiences": self.experiences,
@@ -58,6 +86,8 @@ class TradeMemory:
             "last_updated": time.time()
         }
         self.memory_file.write_text(json.dumps(data, indent=2))
+        self._last_file_save = current_time
+        self._pending_save = False
 
     def get_context_key(self, context: MarketContext) -> str:
         return f"{context.trend}_{context.volatility}"
@@ -95,8 +125,8 @@ class TradeMemory:
             if pattern not in self.pattern_memory:
                 self.pattern_memory[pattern] = []
             self.pattern_memory[pattern].append(result_pnl)
-            # Mantener solo últimos 50 resultados por patrón
-            if len(self.pattern_memory[pattern]) > 50:
+            # Mantener últimos 100 resultados por patrón (2x aumentado, seguro)
+            if len(self.pattern_memory[pattern]) > 100:
                 self.pattern_memory[pattern].pop(0)
         
         self._save_memory()
@@ -172,7 +202,7 @@ class TradeMemory:
                     print(f"[MEMORY] ⚠️ Patrón '{pattern}' tiene historial negativo (Avg PnL: ${pattern_avg:.2f})")
 
         # Decision logic mejorada
-        confidence_threshold = 5  # Necesitamos al menos 5 experiencias para alta confianza
+        confidence_threshold = 10  # 2x: Necesitamos al menos 10 experiencias para alta confianza
         
         if total_experiences >= confidence_threshold:
             # Alta confianza: usar umbral estricto
@@ -213,7 +243,7 @@ class TradeMemory:
 
     def get_best_conditions(self) -> Dict:
         """Identifica las mejores condiciones de mercado para tradear."""
-        if len(self.experiences) < 10:
+        if len(self.experiences) < 20:  # 2x aumentado
             return {}
             
         # Agrupar por condiciones
@@ -232,7 +262,7 @@ class TradeMemory:
         # Calcular métricas
         best_conditions = []
         for key, data in conditions.items():
-            if data["total"] >= 5:  # Solo condiciones con suficiente data
+            if data["total"] >= 10:  # 2x: Solo condiciones con suficiente data
                 trend, vol, rsi = key.split("_")
                 win_rate = (data["wins"] / data["total"]) * 100
                 avg_pnl = data["pnl"] / data["total"]
@@ -334,12 +364,12 @@ class TradeMemory:
                 pattern_stats.append(stats)
         pattern_stats.sort(key=lambda x: x["win_rate"], reverse=True)
         
-        # Learning confidence
-        if total >= 50:
+        # Learning confidence (2x mejorado)
+        if total >= 100:  # 2x de 50
             learning_confidence = "HIGH"
-        elif total >= 20:
+        elif total >= 40:  # 2x de 20
             learning_confidence = "MEDIUM"
-        elif total >= 5:
+        elif total >= 10:  # 2x de 5
             learning_confidence = "LOW"
         else:
             learning_confidence = "MINIMAL"

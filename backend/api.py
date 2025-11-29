@@ -2,6 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import asyncio
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
 app = FastAPI(title="Vibe Factory API")
 
@@ -14,6 +19,9 @@ _auto_trading_task = None
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://vibe-factory-frontend.onrender.com",
+    "https://vibe-factory.onrender.com",
+    "*", # Allow all for easier initial deployment (be careful in production)
 ]
 
 app.add_middleware(

@@ -136,17 +136,17 @@ class BotIntelligence:
         
         if profit > 0:
             self.wins += 1
-            # 🚀 ULTRA-LEARNING: XP aumentado 10x (de 10 a 100)
-            xp_gain = 100 if pattern else 50
+            # 🚀🚀 TURBO-LEARNING: XP aumentado 20x (seguro)
+            xp_gain = 200 if pattern else 100
         else:
             self.losses += 1
-            # 🚀 ULTRA-LEARNING: Aprende de derrotas 5x más rápido (de 5 a 25)
-            xp_gain = 25  # Aprende incluso de pérdidas
+            # 🚀🚀 TURBO-LEARNING: Aprende de derrotas 10x más rápido
+            xp_gain = 50  # Aprende incluso de pérdidas
         
         self.experience_points += xp_gain
         
-        # 🚀 IQ gain aumentado 5x (de 1-5 a 5-25)
-        iq_gain = max(5, int(xp_gain / 20))
+        # 🚀🚀 IQ gain aumentado 10x
+        iq_gain = max(10, int(xp_gain / 10))
         self.iq_level += iq_gain
         
         # Calcular win rate
