@@ -40,8 +40,10 @@ import os
 from fastapi import Request, HTTPException, status
 
 # Default credentials (change via env vars in production!)
-AUTH_USERNAME = os.getenv("AUTH_USERNAME", "raydemartineztorres")
-AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "Limallo33")
+# Default credentials (change via env vars in production!)
+# 🔒 SECURITY UPDATE: Removed hardcoded credentials
+AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
+AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "changeme_please")
 
 class BasicAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
