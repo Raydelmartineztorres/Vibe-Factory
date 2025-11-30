@@ -184,12 +184,19 @@ class TradeMemory:
         if not relevant_exps:
             return False  # Sin experiencia, probar suerte
 
-        # Calcular win rate ponderado - Solo experiencias con outcome
+        # 🚀 NUEVO: Calcular PROFIT NETO en lugar de Win Rate
+        # Esto prioriza "engordar la cuenta" sobre "ganar más trades"
         total_weight = sum(w for _, w in relevant_exps)
-        weighted_wins = sum(w for e, w in relevant_exps if "outcome" in e and e["outcome"] == "WIN")
-        weighted_win_rate = weighted_wins / total_weight if total_weight > 0 else 0
+        
+        # Calcular profit neto ponderado
+        weighted_profit = sum(e.get("pnl", 0) * w for e, w in relevant_exps)
+        avg_profit_per_trade = weighted_profit / total_weight if total_weight > 0 else 0
         
         total_experiences = len(relevant_exps)
+        
+        # Calcular win rate solo para logging (no para decisiones)
+        weighted_wins = sum(w for e, w in relevant_exps if "outcome" in e and e["outcome"] == "WIN")
+        weighted_win_rate = weighted_wins / total_weight if total_weight > 0 else 0
         
         # Verificar pattern memory si hay patrón
         pattern_suggests_avoid = False
@@ -201,25 +208,27 @@ class TradeMemory:
                     pattern_suggests_avoid = True
                     print(f"[MEMORY] ⚠️ Patrón '{pattern}' tiene historial negativo (Avg PnL: ${pattern_avg:.2f})")
 
-        # Decision logic mejorada
+        # 🚀 Decision logic NUEVA: Basada en PROFIT NETO, no en Win Rate
+        # Objetivo: "Engordar la cuenta", no "ganar más trades"
         confidence_threshold = 10  # 2x: Necesitamos al menos 10 experiencias para alta confianza
         
         if total_experiences >= confidence_threshold:
-            # Alta confianza: usar umbral estricto
-            if weighted_win_rate < 0.40:
-                print(f"[MEMORY] 🧠 RECUERDO FUERTE: En {context.trend}/{context.volatility}/{rsi_zone} suelo perder")
-                print(f"  └─ Win Rate ponderado: {weighted_win_rate*100:.1f}% ({total_experiences} experiencias)")
+            # Alta confianza: usar profit neto promedio
+            if avg_profit_per_trade < -5:  # Perdiendo $5+ por trade en promedio
+                print(f"[MEMORY] 🧠 RECUERDO FUERTE: En {context.trend}/{context.volatility}/{rsi_zone} PIERDO DINERO")
+                print(f"  └─ Profit Neto: ${avg_profit_per_trade:.2f}/trade | Win Rate: {weighted_win_rate*100:.1f}% ({total_experiences} exp.)")
                 return True
         elif total_experiences >= 3:
             # Confianza media: umbral más permisivo
-            if weighted_win_rate < 0.30 or pattern_suggests_avoid:
+            if avg_profit_per_trade < -10 or pattern_suggests_avoid:
                 print(f"[MEMORY] 🤔 RECUERDO DÉBIL: En {context.trend}/{context.volatility}/{rsi_zone} podría perder")
-                print(f"  └─ Win Rate: {weighted_win_rate*100:.1f}% ({total_experiences} exp., confianza media)")
+                print(f"  └─ Profit Neto: ${avg_profit_per_trade:.2f}/trade | Win Rate: {weighted_win_rate*100:.1f}% ({total_experiences} exp.)")
                 return True
         
-        # Si tenemos buen historial, anunciarlo
-        if total_experiences >= 3 and weighted_win_rate > 0.60:
-            print(f"[MEMORY] ✅ RECUERDO POSITIVO: En {context.trend}/{context.volatility}/{rsi_zone} suelo ganar ({weighted_win_rate*100:.1f}%)")
+        # Si tenemos buen historial de profit neto, anunciarlo
+        if total_experiences >= 3 and avg_profit_per_trade > 10:
+            print(f"[MEMORY] ✅ RECUERDO POSITIVO: En {context.trend}/{context.volatility}/{rsi_zone} ENGORDO LA CUENTA")
+            print(f"  └─ Profit Neto: +${avg_profit_per_trade:.2f}/trade | Win Rate: {weighted_win_rate*100:.1f}%")
         
         return False
 
